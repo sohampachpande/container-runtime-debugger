@@ -1,36 +1,36 @@
-# eBPF Security Telemetry Agent
+# eBPF Security Telemetry Collection
 
 ## Goal
 
-Build a host-level agent that observes kernel events relevant to runtime security and container health. OOM kills are one event type, not the product boundary.
+Use Tetragon as the host-level eBPF collector for kernel events relevant to runtime security and container health. OOM kills are one event type, not the product boundary.
 
-The agent is observability-only in its first versions. It reports what occurred; kernel-level enforcement is a later, separate decision.
+The project focuses on learning eBPF event semantics, runtime visibility, and security analysis. Tetragon's structured JSON and gRPC events retain process and workload context while its tracing policies expose focused kernel hooks. The project builds the normalization, pipeline, attribution, and detection layers around those events. It is observability-only in its first versions; kernel-level enforcement is a later, separate decision.
 
 ## Architecture
 
-The agent has three layers:
+The collection path has three layers:
 
-1. CO-RE eBPF programs in C attach to kernel tracepoints and write compact events to a ring buffer.
-2. A Go userspace process loads the programs, reads ring-buffer events, and writes structured JSON to stdout.
-3. A host-enrichment layer resolves cgroup identity to Docker containers now and Kubernetes workloads later.
+1. Tetragon attaches eBPF programs and emits process, syscall, file, network, and other supported runtime events.
+2. Vector receives collector output, normalizes event fields, and routes structured events and low-cardinality metrics.
+3. A workload-analysis layer resolves or validates cgroup identity against Docker containers now and Kubernetes workloads later.
 
-The event envelope will carry a timestamp, event type, host PID and TGID, process name, UID, and cgroup identity. Event-specific fields are added only when they are available at the chosen kernel hook.
+The normalized event envelope will carry a timestamp, event type, host PID and TGID, process name, UID, and cgroup identity. Event-specific fields are added only when they are available from the selected collector and hook.
 
 ## First event source: process execution
 
-Start with the sched/sched_process_exec tracepoint. Unlike an OOM victim, the process is alive when this event is emitted, so the agent can capture its cgroup identity directly and establish reliable container attribution.
+Start with the collector's process-execution events. Unlike an OOM victim, the process is alive when this event is emitted, so its cgroup identity can be validated directly and used to establish reliable container attribution.
 
-The first success case is a JSON execution event from the demo container containing its host PID, process name, and cgroup identity.
+The first success case is a normalized JSON execution event from the demo container containing its host PID, process name, and cgroup identity.
 
 ## Subsequent event sources
 
 Add each source through the same event pipeline:
 
-1. OOM victim events from oom/mark_victim, subject to the Pi exposing that tracepoint.
-2. File-access events selected from the host's supported tracepoints or LSM hooks.
-3. Additional security events selected after OOM and file-access patterns are validated.
+1. OOM victim events, subject to the selected collector and Pi exposing the required event.
+2. File-access events selected from the collector's supported policies and hooks.
+3. Network and additional security events selected after OOM and file-access patterns are validated.
 
-The capability probe determines which optional hooks can be enabled. The agent should report unsupported modules at startup rather than assume every Linux host has identical BPF features.
+The capability probe and collector startup output determine which optional event sources are available. The pipeline should report unsupported modules rather than assume every Linux host has identical BPF features.
 
 ## Deployment model
 

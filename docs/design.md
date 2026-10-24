@@ -2,19 +2,21 @@
 
 ## Decision
 
-Build a custom host-level eBPF agent first.
+Use Tetragon as the host-level eBPF collector and focus this project on understanding eBPF events, runtime visibility, security signals, and anomaly detection.
 
-The project goal is to learn how a runtime-security collector works end to end: kernel hooks, BPF verifier constraints, ring-buffer delivery, userspace enrichment, structured event output, and anomaly detection.
+The collector supplies broad kernel event coverage. This project owns the event schema, Vector pipeline, workload-oriented analysis, and security detections. That keeps the learning focus on interpreting and using eBPF telemetry without making a general-purpose collector implementation the central deliverable.
 
-The agent will run once per Linux node. It will be packaged as a dedicated Docker image and later deployed to Kubernetes as a DaemonSet.
+The collector will run once per Linux node. It will first observe the Docker Compose demo workload and later be packaged as a dedicated deployment for Kubernetes.
 
 ## Collection strategy
 
-The custom agent is the first collector because its implementation is the main learning objective.
+Tetragon is the selected collector because it provides structured process, file, network, and kernel tracing events with workload-aware metadata. Its JSON and gRPC event streams preserve the underlying runtime context for Vector and later analysis. Its tracing policies can also select arbitrary kernel hook points and filter events in kernel.
 
-If the required event coverage becomes too broad or too kernel-specific, evaluate Falco or Tetragon as the long-term kernel event source. Both provide mature runtime-security capabilities while preserving the same downstream event-pipeline and anomaly-detection goals.
+Falco is deliberately out of scope for this project. Its rule-first detection engine and default security rules provide more detection behavior than is useful at this stage, when the project needs to learn from raw runtime telemetry and build its own pipeline and detections.
 
-Tracee is not part of the planned collector path because the project preference is to use CNCF-aligned tools for a production-oriented fallback.
+The project does not build a general-purpose collector in the initial scope. Small custom eBPF programs may still be used as focused learning exercises when a hook or event needs deeper investigation.
+
+Tracee is not part of the planned collector path because the project preference is to use CNCF-aligned tools.
 
 ## Event model
 
@@ -35,7 +37,7 @@ Raw kernel events are logs. Aggregated event rates, error counts, and anomaly sc
 ## Event pipeline
 
 ~~~text
-Custom eBPF agent
+Selected eBPF collector
   → JSON runtime-security events
   → Vector
   → structured event output and low-cardinality metrics
@@ -45,14 +47,13 @@ Vector is the initial event-pipeline component. It keeps collection, normalizati
 
 ```mermaid
 flowchart LR
-    K[Linux kernel events] --> A[Custom eBPF agent]
+    K[Linux kernel events] --> A[Selected eBPF collector]
     A --> J[Structured JSON events]
     J --> V[Vector]
     V --> L[Normalized security-event logs]
     V --> M[Low-cardinality event metrics]
     M --> D[Future anomaly detection]
     D --> O[Future OpenSearch platform]
-    F[Future Falco or Tetragon] -. replacement event source .-> J
 ```
 
 ## Initial scope
@@ -82,15 +83,6 @@ Use workload, namespace, event type, and destination class as detector keys. Do 
 The initial project does not include a platform-backed anomaly engine. Start with event collection and the Vector pipeline, then add statistical detection after the event schema and baseline event rates are understood.
 
 OpenSearch is a future option for raw-event search and anomaly scoring. It is deliberately deferred because it is a full search and analytics platform that must be deployed and operated.
-
-## Future collector fallback
-
-Falco or Tetragon becomes the fallback when either condition becomes true:
-
-1. The required event types are unavailable or too kernel-specific for the custom agent.
-2. Implementing a robust event source would distract from the security analytics and anomaly-detection work.
-
-If a fallback is used, it supplies the kernel event collection layer. This project retains ownership of event normalization, Vector integration, workload enrichment, and anomaly detection.
 
 ## Long-term target: AI agent runtime monitoring
 
