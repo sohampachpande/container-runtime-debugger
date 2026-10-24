@@ -1,4 +1,4 @@
-# Container Runtime Debugger
+# Container Runtime Visibility
 
 An eBPF-assisted Linux debugging lab for Docker workloads. It correlates cgroup OOM kills with application logs and container resource metrics.
 
@@ -23,7 +23,7 @@ docker compose logs demo-app
 The compose file limits the container to 64 MiB. The 1 GiB request reliably terminates it after the kernel enforces that limit. Inspect the result with:
 
 ```sh
-docker inspect container-runtime-debugger-demo-app-1 \
+docker inspect container-runtime-visibility-demo-app-1 \
   --format 'OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}}'
 ```
 

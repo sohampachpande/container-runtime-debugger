@@ -49,8 +49,8 @@ sudo docker info 2>&1 | grep -iE 'WARNING|cgroup|memory'
 Clone the repository and run the demo:
 
 ~~~sh
-git clone git@github.com:sohampachpande/container-runtime-debugger.git
-cd container-runtime-debugger
+git clone git@github.com:sohampachpande/container-runtime-visibility.git
+cd container-runtime-visibility
 docker compose up --build --detach
 curl --fail --silent --show-error http://localhost:8080/healthz
 curl --fail --silent --show-error --max-time 20 'http://localhost:8080/allocate?mb=1024'
@@ -59,7 +59,7 @@ curl --fail --silent --show-error --max-time 20 'http://localhost:8080/allocate?
 The allocation request should receive an empty reply because the process is killed. Confirm the diagnosis:
 
 ~~~sh
-docker inspect container-runtime-debugger-demo-app-1 \
+docker inspect container-runtime-visibility-demo-app-1 \
   --format 'Running={{.State.Running}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}}'
 ~~~
 
