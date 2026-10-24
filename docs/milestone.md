@@ -74,7 +74,9 @@ Package the agent as a dedicated Docker image and prepare a Kubernetes DaemonSet
 2. The DaemonSet schedules one agent per eligible Kubernetes node.
 3. The manifest documents its host mounts and required capabilities.
 
-## Milestone 7: Platform-backed anomaly detection
+## Future work
+
+### Platform-backed anomaly detection
 
 Evaluate a search and analytics platform, beginning with OpenSearch, for raw-event retention and statistical anomaly scoring.
 
@@ -84,7 +86,17 @@ Evaluate a search and analytics platform, beginning with OpenSearch, for raw-eve
 2. An anomaly detector scores at least one low-cardinality event-rate feature.
 3. The detector result can be correlated with the underlying security events.
 
-## Milestone 8: AI agent runtime monitoring
+### Application and kernel telemetry correlation
+
+Correlate application logs, traces, and metrics with kernel events. Vector normalizes and enriches the event stream; a later platform retains the enriched data and supports cross-event investigation.
+
+**Success criteria**
+
+1. Application telemetry and kernel events share workload identity through container or cgroup metadata.
+2. Application logs include trace context and an application or agent run identifier.
+3. A bounded correlation maps an application or agent run to kernel events from the same workload and time window.
+
+### AI agent runtime monitoring
 
 Correlate agent runtime telemetry with kernel events to detect unexpected data and network access by an AI agent.
 
