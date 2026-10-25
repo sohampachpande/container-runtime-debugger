@@ -10,7 +10,9 @@ Compose configuration was validated and all three services were started on
 the VM on 2026-10-25. Containerized Tetragon loaded its base sensor; fresh host
 and Juice Shop events passed the repository acceptance check.
 
-The whole stack targets the Ubuntu Linux VM. Tetragon's privileged container
+The default root file targets the Ubuntu Linux VM. For a full local test using
+Docker Desktop's Linux kernel, use [the Desktop override](docker-desktop.md).
+Tetragon's privileged container
 uses host PID, cgroup, and UTS namespaces plus the host's BTF metadata. Its
 eBPF programs execute in that host kernel and observe host and container
 activity. UTS sharing preserves the host name in exported events. This follows
@@ -106,8 +108,9 @@ Compose network with `sudo docker compose down`. This retains the raw event
 directory and external checkpoint volume. No automatic restart policy is set;
 start the stack explicitly after reboot.
 
-The complete stack requires Linux. To run only Juice Shop on macOS, select
-the independent service: `docker compose up --detach juice-shop`.
+The collector requires a Linux kernel. The Desktop override uses the one in
+Docker Desktop's VM. To run only Juice Shop on macOS, select the independent
+service: `docker compose up --detach juice-shop`.
 
 ## 3. Verify host and container telemetry
 
@@ -121,8 +124,10 @@ It uses the running Compose service IDs, generates a short host process and a
 harmless Node.js process inside Juice Shop, compares original and normalized
 events, checks container identity against the live cgroup, verifies the host
 name, and requires counter increments with exactly two label keys. It prints
-a compact result and exits nonzero if a check fails. It requires the VM's
-existing Python standard library and root access to the raw log.
+a compact result and exits nonzero if a check fails. It requires Python's
+standard library and Docker access. Raw logs and `/proc` are read through
+the collector container. On Docker Desktop, use the documented `--desktop`
+mode so its host probe executes in the Linux VM rather than on macOS.
 
 For manual inspection, the equivalent activity and output commands are:
 

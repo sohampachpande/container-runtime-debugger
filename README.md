@@ -48,8 +48,9 @@ gcloud compute ssh runtime-visibility \
 
 Then browse to [Juice Shop](http://localhost:3000).
 
-For the application alone on macOS, use
-`docker compose up --detach juice-shop`. Stop the full Linux lab with
+For ongoing development, run the full stack locally on Docker Desktop's Linux kernel using
+[the Desktop override and commands](docs/docker-desktop.md). For the application
+alone on macOS, use `docker compose up --detach juice-shop`. Stop the native Linux lab with
 `sudo docker compose down`; event files and Vector's external checkpoint
 volume are retained.
 
@@ -72,7 +73,9 @@ running the OOM exercise on the small VM.
 
 The eBPF milestone needs a Linux kernel with BTF support and permission to load
 tracing programs. `bpftool` is an optional diagnostic aid. Docker Desktop on
-macOS is fine for the application demo; use the GCP Linux VM for Tetragon.
+macOS runs its own Linux VM. The GCP Linux deployment and the local
+[Docker Desktop deployment](docs/docker-desktop.md) are both verified; neither
+collects events from the macOS kernel.
 
 ## Debugging workflow
 

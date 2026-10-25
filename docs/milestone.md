@@ -197,6 +197,26 @@ Vector, and 108 MiB for Juice Shop, leaving about 275 MiB available on the VM.
 The existing external checkpoint volume was retained. Full restart/checkpoint
 recovery, rotation behavior, and a Prometheus rate query remain unverified.
 
+**Docker Desktop local test — verified on 2026-10-25**
+
+`compose.desktop.yaml` adapts the root stack to the local ARM64 Docker Desktop
+VM (`7.0.14-linuxkit`, cgroup v2, readable BTF, about 4 GiB RAM). The privileged
+collector loaded its base sensor. The override shares raw events through a
+named volume and isolates Desktop checkpoints from the GCP volume.
+
+All four Vector tests passed. The repository acceptance check with `--desktop`
+matched Linux VM execution/exit PID `1246` and Juice Shop execution PID `1260`
+through raw and normalized events. It verified node `docker-desktop`, the
+LinuxKit kernel, live container cgroup membership, and counter increments with
+exactly the `host` and `event_type` labels. The VM probe uses a temporary
+namespace-entering helper and retains that helper's container cgroup; no macOS
+process was used as the observed host probe.
+
+Juice Shop HTTP readiness passed; all containers were running with no OOM
+kills or automatic restarts. Measured memory was about 75 MiB for Tetragon,
+41 MiB for Vector, and 102 MiB for Juice Shop. See
+[the local Desktop guide](docker-desktop.md) for reproducible commands.
+
 ## Milestone 5: Collector event coverage and container attribution
 
 Make the pipeline able to process every event schema emitted by the collector without adding event-specific pipeline logic. Expand collector coverage incrementally, beginning with OOM victims and then file-access patterns.

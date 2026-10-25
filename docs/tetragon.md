@@ -20,7 +20,9 @@ host BTF file supports loading CO-RE programs. Host UTS sharing preserves the
 host name in exported events. The initial development deployment uses
 privileged mode, following the upstream
 [container instructions](https://tetragon.io/docs/installation/container/).
-The full collector stack targets the Linux VM, not macOS Docker Desktop.
+The collector targets a Linux kernel: either the GCP VM or Docker Desktop's
+Linux VM using [the Desktop override](docker-desktop.md). It does not trace
+the macOS kernel.
 
 Repository drop-ins under `collector/tetragon/tetragon.conf.d/` are mounted
 read-only into `/etc/tetragon/tetragon.conf.d/`. They configure JSON export,
