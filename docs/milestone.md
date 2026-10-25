@@ -93,7 +93,8 @@ identity, but still does not export a raw cgroup field.
 
 **Docker attribution probe — verified on 2026-10-25**
 
-1. Built the existing `demo-app/Dockerfile` as `runtime-visibility-demo-app:m3`
+1. Built the Python Dockerfile (now `test-app/Dockerfile`, originally
+   `demo-app/Dockerfile`) as `runtime-visibility-demo-app:m3`
    and started `demo-app-m3` with a 64 MiB limit and port 8080 bound to loopback.
    Docker Compose is unavailable on this VM, so the test used Docker directly.
    The health endpoint returned `ok`; no OOM request was made.

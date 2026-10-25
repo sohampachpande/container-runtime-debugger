@@ -36,7 +36,8 @@ Then browse to [Juice Shop](http://localhost:3000).
 
 ## Original OOM exercise
 
-The Python workload remains available separately through `compose.oom.yaml`:
+The Python workload in `test-app/` remains available separately through
+`compose.oom.yaml`:
 
 ```sh
 docker compose -f compose.oom.yaml up --build --detach

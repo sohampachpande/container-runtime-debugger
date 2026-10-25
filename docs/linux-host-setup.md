@@ -60,7 +60,7 @@ curl --fail --silent --show-error --max-time 20 'http://localhost:8080/allocate?
 The allocation request should receive an empty reply because the process is killed. Confirm the diagnosis:
 
 ~~~sh
-docker inspect container-runtime-visibility-demo-app-1 \
+docker inspect container-runtime-visibility-test-app-1 \
   --format 'Running={{.State.Running}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}}'
 ~~~
 

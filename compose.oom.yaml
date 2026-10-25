@@ -1,6 +1,6 @@
 services:
-  demo-app:
-    build: ./demo-app
+  test-app:
+    build: ./test-app
     ports:
       - "127.0.0.1:8080:8080"
     mem_limit: 64m

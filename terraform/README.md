@@ -97,7 +97,7 @@ Observed on 2026-10-25. Terraform itself does not install this software.
 | Tetragon and tetra `v1.7.0` | Installed during the collector session from the upstream amd64 release archive, after SHA-256 checksum verification |
 | Bundled `bpftool v7.3.0` | Installed by that archive at `/usr/local/lib/tetragon/bpftool`; verified usable |
 | Tetragon BPF programs, support tools, and systemd unit | Installed by the same upstream installer under `/usr/local/` and `/usr/lib/systemd/system/` |
-| Original OOM image | Built from `demo-app/Dockerfile` as `runtime-visibility-demo-app:m3`, using `python:3.12-alpine`; retained for the separate OOM exercise |
+| Original OOM image | Built from the Python Dockerfile (now `test-app/Dockerfile`) as `runtime-visibility-demo-app:m3`, using `python:3.12-alpine`; retained for the separate OOM exercise |
 | Current security demo image | Pulled upstream `bkimminich/juice-shop:v20.3.0`; selected by the default `compose.yaml` |
 
 No APT packages were installed during this collector session. Docker Compose,
