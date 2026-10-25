@@ -12,39 +12,54 @@ The demo Python service runs in a container with a 64 MiB memory limit. A 1 GiB 
 
 See [the debugging workflow](debugging-workflow.md).
 
-## Milestone 2: Linux host setup — complete
+## Milestone 2: Linux test environments
 
-The project was cloned to a Raspberry Pi 5, then Docker Compose reproduced and diagnosed the memory-constrained OOM kill. See [the Raspberry Pi setup](linux-host-setup.md).
+The project was cloned to a Raspberry Pi 5, where Docker Compose reproduced and
+diagnosed the memory-constrained OOM kill. See [the Raspberry Pi setup](linux-host-setup.md).
 
-**Verified**
+**Raspberry Pi status**
 
 1. Docker Compose starts the demo service.
 2. The health endpoint responds successfully.
 3. The 1 GiB allocation request reproduces the OOM kill.
 4. The cgroup v2 memory controller is enabled with cgroup_enable=memory.
+5. The running Raspberry Pi kernel does not expose BTF:
+   `CONFIG_DEBUG_INFO_BTF` is unset and `/sys/kernel/btf/vmlinux` is absent.
+
+The Pi remains useful for the Docker OOM demo but is not the current Tetragon
+test host.
+
+**GCP collector test host — verified**
+
+1. Terraform provisions an Ubuntu 24.04 `e2-micro` VM in `us-west1-b`.
+2. The running kernel exposes `/sys/kernel/btf/vmlinux` and enables
+   `CONFIG_DEBUG_INFO_BTF=y` and `CONFIG_DEBUG_INFO_BTF_MODULES=y`.
+3. The host uses cgroup v2 with the memory controller enabled.
+4. IAP SSH and passwordless sudo work.
+
+See [the Terraform lab setup](../terraform/README.md).
 
 **Still required before eBPF work**
 
-1. The host exposes BTF metadata at /sys/kernel/btf/vmlinux.
-2. sudo bpftool feature probe kernel reports the available BPF capabilities.
+1. Install `bpftool` on the GCP host and record `sudo bpftool feature probe kernel`.
 
 ## Milestone 3: eBPF event pipeline and process execution
 
-Build the host-level security telemetry agent described in [the eBPF collector design](ebpf-collector.md). Its first event source is process execution.
+Deploy Tetragon as the host-level collector described in [the eBPF collector design](ebpf-collector.md). Its first event source is process execution.
 
 **Success criteria**
 
-1. The agent starts successfully on the Linux host.
-2. A process execution produces one structured event with host PID, process name, and cgroup identity.
-3. The event is written as JSON to stdout.
+1. Tetragon starts successfully on the GCP Linux host.
+2. A process execution produces one Tetragon JSON event with host PID, process name, and cgroup identity.
+3. The event is written to the collector's JSON output stream.
 
 ## Milestone 4: Vector event pipeline
 
-Route custom-agent events through Vector and derive low-cardinality event-rate metrics.
+Route Tetragon events through Vector and derive low-cardinality event-rate metrics.
 
 **Success criteria**
 
-1. Vector receives structured events from the custom agent.
+1. Vector receives structured events from Tetragon.
 2. Vector outputs normalized events and an event-rate metric.
 3. Metric labels exclude high-cardinality fields such as PID and raw file paths.
 
