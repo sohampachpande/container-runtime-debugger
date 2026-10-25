@@ -10,24 +10,14 @@ The collector will run once per Linux node. It will first observe the Docker Com
 
 ## Test environment
 
-The current collector test host is a GCP Compute Engine VM provisioned by
-[`terraform/`](../terraform/). It runs Ubuntu 24.04 on an `e2-micro` instance
-in `us-west1-b`, with a 30 GB standard persistent disk and IAP-only SSH access.
+The current development environment is Docker Desktop's Linux VM. Combine
+`compose.yaml` and `compose.desktop.yaml` to run Tetragon, Vector, and Juice
+Shop. The collector observes the VM's Linux kernel, not macOS. See
+[the local development guide](docker-desktop.md) for verified kernel details
+and commands.
 
-This host was selected because its `7.0.0-1014-gcp` kernel exposes readable BTF
-at `/sys/kernel/btf/vmlinux`, has `CONFIG_DEBUG_INFO_BTF=y`, and uses cgroup v2
-with the memory controller enabled. Those are prerequisites for Tetragon's
-CO-RE programs and for container resource attribution.
-
-The free-tier-eligible VM has about 1 GB of RAM. Use it to prove Tetragon
-startup and process-execution collection first. Resize to a billable instance
-only if Tetragon, Vector, and the demo workload cannot run together reliably.
-The Terraform setup documents the instance's separate ephemeral IPv4 charge and
-how to stop or destroy the lab.
-
-The Raspberry Pi 5 remains a valid Docker OOM demonstration host, but its
-current Raspberry Pi OS kernel was built without BTF. It cannot run Tetragon
-until it uses matching external BTF metadata or a BTF-enabled kernel.
+The earlier [GCP VM setup](../archive/README.md) is archived. The Raspberry Pi
+5 remains an OOM demonstration host; its current kernel lacks BTF.
 
 ## Collection strategy
 

@@ -37,7 +37,7 @@ test host.
 3. The host uses cgroup v2 with the memory controller enabled.
 4. IAP SSH and passwordless sudo work.
 
-See [the Terraform lab setup](../terraform/README.md).
+See [the Terraform lab setup](../archive/terraform/README.md).
 
 **Preflight result**
 
@@ -178,7 +178,7 @@ The root `compose.yaml` declares the three separate Tetragon, Vector, and
 Juice Shop containers, replacing the standalone Vector Compose definition.
 It retains the host log directory and external `vector-m4-data` checkpoints,
 and adds privileged host access for the pinned Tetragon image. The
-[Compose guide](compose.md) documents the finalized setup and commands.
+[Compose guide](../archive/docs/compose.md) documents the finalized setup and commands.
 Installed Ubuntu's `docker-compose-v2` version
 `2.40.3+ds1-0ubuntu1~24.04.1`, validated the root file, and passed all four
 Vector tests through Compose. The three pinned containers are running, and

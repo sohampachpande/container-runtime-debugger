@@ -5,7 +5,7 @@
 The root `compose.yaml` runs one dedicated Tetragon container on the Linux
 host alongside Vector and Juice Shop. It uses `quay.io/cilium/tetragon:v1.7.0`;
 no source build or native package installation is required. See
-[the Compose guide](compose.md) for setup, validation, startup, and inspection.
+[the Docker Desktop guide](docker-desktop.md) for setup, validation, startup, and inspection.
 
 The containerized collector verified process execution, exit, and Docker
 container identity on the GCP VM on 2026-10-25. Its base BPF sensor loaded
@@ -127,7 +127,7 @@ remains Milestone 4; further event coverage follows incrementally.
 
 ## Validate host and container identity
 
-Use [the Compose acceptance check](compose.md#3-verify-host-and-container-telemetry)
+Use [the Desktop acceptance check](docker-desktop.md#repeat-the-live-acceptance-check)
 after the collector reports successful base-sensor loading and is listening
 for events. Compare a fresh host execution with `/proc`, then check a Node.js
 execution inside Juice Shop against Docker's container ID.

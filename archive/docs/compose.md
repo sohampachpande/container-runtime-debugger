@@ -11,7 +11,7 @@ the VM on 2026-10-25. Containerized Tetragon loaded its base sensor; fresh host
 and Juice Shop events passed the repository acceptance check.
 
 The default root file targets the Ubuntu Linux VM. For a full local test using
-Docker Desktop's Linux kernel, use [the Desktop override](docker-desktop.md).
+Docker Desktop's Linux kernel, use [the Desktop override](../../docs/docker-desktop.md).
 Tetragon's privileged container
 uses host PID, cgroup, and UTS namespaces plus the host's BTF metadata. Its
 eBPF programs execute in that host kernel and observe host and container

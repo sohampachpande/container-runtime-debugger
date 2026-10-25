@@ -83,7 +83,7 @@ Verified on the provisioned VM on 2026-10-25:
 
 The initial checks established prerequisites. Tetragon's base sensor and live
 host/container execution events were subsequently verified; see the software
-inventory below and [Milestone 3 evidence](../docs/milestone.md).
+inventory below and [Milestone 3 evidence](../../docs/milestone.md).
 
 ## VM software inventory and installation
 

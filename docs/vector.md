@@ -66,43 +66,27 @@ outages, rotation, and container restarts need further operational testing.
 ## Validate and run with Compose
 
 The root `compose.yaml` contains Vector alongside Tetragon and Juice Shop.
-Follow [the Compose guide](compose.md) for host setup and the complete lifecycle.
-From the repository root on the Linux host:
+For development, combine it with `compose.desktop.yaml`. Follow
+[the Docker Desktop guide](docker-desktop.md) for configuration validation,
+the four Vector tests, startup, logs, and shutdown commands.
 
-```sh
-sudo docker compose config --quiet
-sudo docker compose pull
-sudo docker compose run --rm --no-deps vector \
-  validate --no-environment /etc/vector/vector.toml
-sudo docker compose run --rm --no-deps vector test /etc/vector/vector.toml
-sudo docker compose up --detach
-sudo docker compose logs --follow vector
-curl --fail http://127.0.0.1:9598/metrics
-```
-
-The root file uses the external `vector-m4-data` volume for persistent read
-checkpoints. Create it during host setup as documented in the Compose guide.
-Vector reads Tetragon's host directory read-only. No separate Vector Compose
-file or hand-written `docker run` deployment is needed.
+The override creates the `runtime-visibility-desktop-vector-data` checkpoint
+volume automatically. Vector reads the shared Tetragon log volume read-only.
+No separate Vector Compose file or hand-written `docker run` deployment is needed.
 
 ## Verify the pipeline
 
-The [Compose acceptance check](compose.md#3-verify-host-and-container-telemetry)
+The [Desktop acceptance check](docker-desktop.md#repeat-the-live-acceptance-check)
 generates fresh host and Juice Shop executions. Match their host PIDs,
 executables, execution IDs, and original event objects between the raw file
 and normalized output. Confirm that both event counters advance and that
 labels remain limited to `host` and `event_type`.
 
-Inspect resource use and stop the whole lab with:
+Use the [Desktop lifecycle commands](docker-desktop.md#inspect-output-and-stop)
+to inspect resource use and stop the lab. Compose teardown without `-v`
+retains the named event and checkpoint volumes.
 
-```sh
-sudo docker compose stats --no-stream
-free -m
-sudo docker compose down
-```
-
-Compose teardown retains the external checkpoint volume and host event files.
-The full Compose deployment is verified on the VM. Run
-`sudo python3 scripts/verify-pipeline.py` for the repeatable host/container
-acceptance check. The script validates event correlation and counter labels;
-it does not execute a Prometheus rate query or test checkpoint recovery.
+The full Compose deployment is verified on Docker Desktop. Run
+`python3 scripts/verify-pipeline.py --desktop` for the repeatable acceptance
+check. It validates event correlation and counter labels; it does not execute
+a Prometheus rate query or test checkpoint recovery.
