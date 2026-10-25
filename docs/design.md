@@ -8,6 +8,27 @@ The collector supplies broad kernel event coverage. This project owns the event 
 
 The collector will run once per Linux node. It will first observe the Docker Compose demo workload and later be packaged as a dedicated deployment for Kubernetes.
 
+## Test environment
+
+The current collector test host is a GCP Compute Engine VM provisioned by
+[`terraform/`](../terraform/). It runs Ubuntu 24.04 on an `e2-micro` instance
+in `us-west1-b`, with a 30 GB standard persistent disk and IAP-only SSH access.
+
+This host was selected because its `7.0.0-1014-gcp` kernel exposes readable BTF
+at `/sys/kernel/btf/vmlinux`, has `CONFIG_DEBUG_INFO_BTF=y`, and uses cgroup v2
+with the memory controller enabled. Those are prerequisites for Tetragon's
+CO-RE programs and for container resource attribution.
+
+The free-tier-eligible VM has about 1 GB of RAM. Use it to prove Tetragon
+startup and process-execution collection first. Resize to a billable instance
+only if Tetragon, Vector, and the demo workload cannot run together reliably.
+The Terraform setup documents the instance's separate ephemeral IPv4 charge and
+how to stop or destroy the lab.
+
+The Raspberry Pi 5 remains a valid Docker OOM demonstration host, but its
+current Raspberry Pi OS kernel was built without BTF. It cannot run Tetragon
+until it uses matching external BTF metadata or a BTF-enabled kernel.
+
 ## Collection strategy
 
 Tetragon is the selected collector because it provides structured process, file, network, and kernel tracing events with workload-aware metadata. Its JSON and gRPC event streams preserve the underlying runtime context for Vector and later analysis. Its tracing policies can also select arbitrary kernel hook points and filter events in kernel.
@@ -58,7 +79,7 @@ flowchart LR
 
 ## Initial scope
 
-Start with process execution events. This proves the complete collection path while the observed process is still alive, allowing reliable cgroup and workload attribution.
+Start with Tetragon process-execution events. This proves the complete collection path while the observed process is still alive, allowing reliable cgroup and workload attribution.
 
 Add event sources incrementally:
 

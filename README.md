@@ -33,6 +33,8 @@ The eBPF milestone needs a Linux kernel with BTF support, `bpftool`, and permiss
 
 ## Debugging workflow
 
+For a cloud Linux host, see [the Terraform GCP lab setup](terraform/README.md).
+
 Follow [the Docker OOM debugging workflow](docs/debugging-workflow.md) to reproduce the incident and diagnose it with application logs and Docker container state.
 
 ## Planned next milestone
