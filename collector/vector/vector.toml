@@ -1,0 +1,144 @@
+data_dir = "/var/lib/vector"
+
+[sources.tetragon]
+type = "file"
+include = ["/var/log/tetragon/tetragon.log"]
+read_from = "end"
+
+[transforms.normalize]
+type = "remap"
+inputs = ["tetragon"]
+drop_on_error = true
+drop_on_abort = true
+reroute_dropped = true
+source = '''
+raw = object!(parse_json!(.message))
+event_type = "unknown"
+payload = {}
+if exists(raw.process_exec) {
+  event_type = "process_exec"
+  payload = object!(raw.process_exec)
+} else if exists(raw.process_exit) {
+  event_type = "process_exit"
+  payload = object!(raw.process_exit)
+} else {
+  abort
+}
+process = object!(payload.process)
+. = {
+  "schema_version": 1,
+  "collector": "tetragon",
+  "timestamp": parse_timestamp!(string!(raw.time), format: "%+"),
+  "event_type": event_type,
+  "host": {"name": string!(raw.node_name)},
+  "process": process,
+  "parent": payload.parent,
+  "container": {"id_prefix": process.docker},
+  "tetragon": raw
+}
+'''
+
+[transforms.event_counter]
+type = "log_to_metric"
+inputs = ["normalize"]
+
+[[transforms.event_counter.metrics]]
+type = "counter"
+field = "event_type"
+name = "runtime_events_total"
+
+[transforms.event_counter.metrics.tags]
+event_type = "{{ event_type }}"
+host = "{{ host.name }}"
+
+[sinks.normalized]
+type = "console"
+inputs = ["normalize"]
+target = "stdout"
+encoding.codec = "json"
+
+[sinks.rejected]
+type = "console"
+inputs = ["normalize.dropped"]
+target = "stderr"
+encoding.codec = "json"
+
+[sinks.metrics]
+type = "prometheus_exporter"
+inputs = ["event_counter"]
+address = "0.0.0.0:9598"
+suppress_timestamp = true
+
+[[tests]]
+name = "execution preserves process, parent, and original event"
+
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-25T18:23:53Z","node_name":"test-host","process_exec":{"process":{"pid":123,"binary":"/nodejs/bin/node","docker":"abc123","arguments":"app.js"},"parent":{"pid":100}}}'
+
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.schema_version, 1)
+assert_eq!(.event_type, "process_exec")
+assert_eq!(.process.pid, 123)
+assert_eq!(.parent.pid, 100)
+assert_eq!(.container.id_prefix, "abc123")
+assert_eq!(.tetragon.process_exec.process.arguments, "app.js")
+'''
+
+[[tests]]
+name = "host exit preserves status without inventing container identity"
+
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-25T18:24:00Z","node_name":"test-host","process_exit":{"process":{"pid":124,"binary":"/usr/bin/sleep"},"status":7}}'
+
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.event_type, "process_exit")
+assert_eq!(.process.pid, 124)
+assert_eq!(.container.id_prefix, null)
+assert_eq!(.tetragon.process_exit.status, 7)
+'''
+
+[[tests]]
+name = "malformed JSON is rejected"
+no_outputs_from = ["normalize", "event_counter"]
+
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = 'not JSON'
+
+[[tests.outputs]]
+extract_from = "normalize.dropped"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert_eq!(.message, "not JSON")'
+
+[[tests]]
+name = "counter labels exclude process and container identifiers"
+
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-25T18:23:53Z","node_name":"test-host","process_exec":{"process":{"pid":999,"binary":"/unique/path","docker":"unique-container"}}}'
+
+[[tests.outputs]]
+extract_from = "event_counter"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.name, "runtime_events_total")
+assert_eq!(.tags, {"event_type": "process_exec", "host": "test-host"})
+assert_eq!(.type, "counter")
+assert_eq!(.kind, "incremental")
+'''

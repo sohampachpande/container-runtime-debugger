@@ -37,7 +37,7 @@ test host.
 3. The host uses cgroup v2 with the memory controller enabled.
 4. IAP SSH and passwordless sudo work.
 
-See [the Terraform lab setup](../terraform/README.md).
+See [the Terraform lab setup](../archive/terraform/README.md).
 
 **Preflight result**
 
@@ -88,7 +88,7 @@ The captured execution record has no cgroup field. Its host cgroup membership
 was independently checked through `/proc/4268/cgroup` while the process was
 alive, but a `/proc` lookup alone does not satisfy criterion 2. Choose an
 enrichment approach from the actual schema before completing this milestone.
-Vector has not been validated. The Docker probe below verifies native container
+The Vector pipeline is tracked under Milestone 4. The Docker probe below verifies native container
 identity, but still does not export a raw cgroup field.
 
 **Docker attribution probe — verified on 2026-10-25**
@@ -138,6 +138,84 @@ Route Tetragon events through Vector and derive low-cardinality event-rate metri
 1. Vector receives structured events from Tetragon.
 2. Vector outputs normalized events and an event-rate metric.
 3. Metric labels exclude high-cardinality fields such as PID and raw file paths.
+
+**Implementation status — initial pipeline verified on 2026-10-25**
+
+[`collector/vector/`](../collector/vector/) contains the file source,
+execution/exit normalization, bounded console output, an event counter, and
+inline transform tests. [The Vector guide](vector.md) describes deployment and
+live acceptance checks.
+
+1. Deployed `timberio/vector:0.60.0-alpine` as `vector-m4`, with a 128 MiB
+   limit, one worker, a read-only Tetragon log-directory mount, persistent read
+   checkpoints, and loopback port 9598. No new APT packages were needed.
+2. Vector configuration validation and all four transform tests passed.
+   The tests cover process execution, exit status preservation, malformed JSON
+   rejection, and metric-label isolation.
+3. Fresh host execution and exit records for PID `7362` (`/usr/bin/sleep`),
+   plus a Juice Shop Node.js execution for PID `7383`, were matched between
+   Tetragon's raw file and Vector's normalized output. The complete `tetragon`
+   object equaled the original event in each case. Container identity matched
+   Docker's ID prefix and the live host cgroup.
+4. The execution counter increased by 9 and the exit counter by 10 during the
+   probe window, which included host background activity and verification
+   commands. Labels were exactly `event_type` and `host`, excluding PIDs,
+   paths, arguments, and container IDs.
+5. Measured Vector container memory was about 13 MiB within its 128 MiB limit;
+   Juice Shop used about 112 MiB and the host had about 248 MiB available.
+   Both containers were healthy, and Tetragon had zero automatic restarts.
+
+The exported metric is `runtime_events_total`, a counter suitable for deriving
+event rates. A Prometheus scrape and `rate(runtime_events_total[1m])` query have
+not yet been validated; no standalone per-second rate series is emitted.
+Read-checkpoint recovery and log-rotation behavior also need operational
+testing before relying on delivery guarantees. Raw cgroup enrichment remains
+deferred from Milestone 3.
+
+**Root Compose packaging — verified on 2026-10-25**
+
+The root `compose.yaml` declares the three separate Tetragon, Vector, and
+Juice Shop containers, replacing the standalone Vector Compose definition.
+It retains the host log directory and external `vector-m4-data` checkpoints,
+and adds privileged host access for the pinned Tetragon image. The
+[Compose guide](../archive/docs/compose.md) documents the finalized setup and commands.
+Installed Ubuntu's `docker-compose-v2` version
+`2.40.3+ds1-0ubuntu1~24.04.1`, validated the root file, and passed all four
+Vector tests through Compose. The three pinned containers are running, and
+Tetragon's base sensor loaded successfully with exactly one collector process.
+
+The repeatable `scripts/verify-pipeline.py` check matched fresh host execution
+and exit events for PID `11020` and a Juice Shop execution for PID `11040`,
+including exact raw-event preservation, host name, Docker identity prefix,
+and live cgroup membership. Counter increments were verified with only
+`host` and `event_type` labels. A subsequent root `docker compose up --detach`
+was repeatable without recreating services.
+
+The services had no OOM kills or automatic restarts, and Juice Shop HTTP
+readiness passed. Measured memory was about 65 MiB for Tetragon, 23 MiB for
+Vector, and 108 MiB for Juice Shop, leaving about 275 MiB available on the VM.
+The existing external checkpoint volume was retained. Full restart/checkpoint
+recovery, rotation behavior, and a Prometheus rate query remain unverified.
+
+**Docker Desktop local test — verified on 2026-10-25**
+
+`compose.desktop.yaml` adapts the root stack to the local ARM64 Docker Desktop
+VM (`7.0.14-linuxkit`, cgroup v2, readable BTF, about 4 GiB RAM). The privileged
+collector loaded its base sensor. The override shares raw events through a
+named volume and isolates Desktop checkpoints from the GCP volume.
+
+All four Vector tests passed. The repository acceptance check with `--desktop`
+matched Linux VM execution/exit PID `1246` and Juice Shop execution PID `1260`
+through raw and normalized events. It verified node `docker-desktop`, the
+LinuxKit kernel, live container cgroup membership, and counter increments with
+exactly the `host` and `event_type` labels. The VM probe uses a temporary
+namespace-entering helper and retains that helper's container cgroup; no macOS
+process was used as the observed host probe.
+
+Juice Shop HTTP readiness passed; all containers were running with no OOM
+kills or automatic restarts. Measured memory was about 75 MiB for Tetragon,
+41 MiB for Vector, and 102 MiB for Juice Shop. See
+[the local Desktop guide](docker-desktop.md) for reproducible commands.
 
 ## Milestone 5: Collector event coverage and container attribution
 

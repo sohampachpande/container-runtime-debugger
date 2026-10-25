@@ -1,6 +1,82 @@
 services:
+  tetragon:
+    image: quay.io/cilium/tetragon:v1.7.0
+    command: ["--btf", "/var/lib/tetragon/btf"]
+    privileged: true
+    pid: host
+    cgroup: host
+    uts: host
+    mem_limit: 256m
+    stop_grace_period: 30s
+    volumes:
+      - type: bind
+        source: /sys/kernel/btf/vmlinux
+        target: /var/lib/tetragon/btf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./collector/tetragon/tetragon.conf.d
+        target: /etc/tetragon/tetragon.conf.d
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/log/tetragon
+        target: /var/log/tetragon
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  vector:
+    image: timberio/vector:0.60.0-alpine
+    user: "0:0"
+    command: ["--config", "/etc/vector/vector.toml", "--threads", "1"]
+    mem_limit: 128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - tetragon
+    volumes:
+      - type: bind
+        source: ./collector/vector/vector.toml
+        target: /etc/vector/vector.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/log/tetragon
+        target: /var/log/tetragon
+        read_only: true
+        bind:
+          create_host_path: false
+      - vector-data:/var/lib/vector
+    ports:
+      - "127.0.0.1:9598:9598"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   juice-shop:
     image: bkimminich/juice-shop:v20.3.0
     ports:
       - "127.0.0.1:3000:3000"
     mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  vector-data:
+    external: true
+    name: vector-m4-data

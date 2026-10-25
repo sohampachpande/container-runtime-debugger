@@ -1,0 +1,29 @@
+# Use with compose.yaml on Docker Desktop's Linux VM.
+services:
+  tetragon:
+    command: ["--btf", "/sys/kernel/btf/vmlinux"]
+    volumes: !override
+      - type: bind
+        source: ./collector/tetragon/tetragon.conf.d
+        target: /etc/tetragon/tetragon.conf.d
+        read_only: true
+        bind:
+          create_host_path: false
+      - tetragon-logs:/var/log/tetragon
+
+  vector:
+    volumes: !override
+      - type: bind
+        source: ./collector/vector/vector.toml
+        target: /etc/vector/vector.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - tetragon-logs:/var/log/tetragon:ro
+      - vector-data:/var/lib/vector
+
+volumes:
+  tetragon-logs:
+  vector-data:
+    external: false
+    name: runtime-visibility-desktop-vector-data

@@ -11,28 +11,22 @@ The demo service intentionally allocates memory until Docker's cgroup memory lim
 2. The application logs its allocation progress before it exits.
 3. A later eBPF collector will observe the kernel OOM event and attribute it to the container cgroup.
 
-## Run the demo
+## Run locally with Docker Desktop
+
+Run Tetragon, Vector, and OWASP Juice Shop as separate containers using
+Docker Desktop's Linux VM kernel. Follow [the local development guide](docs/docker-desktop.md)
+for prerequisites, validation, logs, and shutdown commands.
 
 ```sh
-docker compose up --detach
-curl --fail http://localhost:3000/
-docker compose ps
-docker compose logs juice-shop
+docker compose -p runtime-visibility-desktop \
+  -f compose.yaml -f compose.desktop.yaml up --detach
+python3 scripts/verify-pipeline.py --desktop
 ```
 
-The default workload uses the upstream `bkimminich/juice-shop:v20.3.0` image,
-binds port 3000 to loopback, and has a 384 MiB memory limit. Measure startup and
-runtime memory before adding more services to the small VM. For access from
-your Mac, open an SSH tunnel:
-
-```sh
-gcloud compute ssh runtime-visibility \
-  --project=container-runtime-visibility \
-  --zone=us-west1-b \
-  --tunnel-through-iap -- -L 3000:127.0.0.1:3000
-```
-
-Then browse to [Juice Shop](http://localhost:3000).
+Open [Juice Shop](http://localhost:3000). Vector exposes event counters at
+[localhost:9598/metrics](http://localhost:9598/metrics) and normalized JSON in
+its container logs. Tetragon and Vector share raw events through a Docker
+named volume. The collector observes the Linux VM kernel, not macOS.
 
 ## Original OOM exercise
 
@@ -47,22 +41,32 @@ curl 'http://localhost:8080/allocate?mb=1024'
 
 Its 64 MiB limit and diagnostic steps are documented in
 [the Docker OOM workflow](docs/debugging-workflow.md). Stop Juice Shop before
-running the OOM exercise on the small VM.
+running the OOM exercise if memory is constrained.
 
 ## Linux host requirement
 
 The eBPF milestone needs a Linux kernel with BTF support and permission to load
 tracing programs. `bpftool` is an optional diagnostic aid. Docker Desktop on
-macOS is fine for the application demo; use the GCP Linux VM for Tetragon.
+macOS runs its own Linux VM. The GCP Linux deployment and the local
+[Docker Desktop deployment](docs/docker-desktop.md) are both verified; neither
+collects events from the macOS kernel.
 
 ## Debugging workflow
 
-For a cloud Linux host, see [the Terraform GCP lab setup](terraform/README.md).
+The earlier [GCP VM setup](archive/README.md) is archived.
 
 Follow [the Docker OOM debugging workflow](docs/debugging-workflow.md) to reproduce the incident and diagnose it with application logs and Docker container state.
 
-## Planned next milestone
+## Collector and pipeline status
 
-Install Tetragon and validate a process-execution JSON event against a live host
-process. Follow [the collector setup](docs/tetragon.md). Vector routing,
-container attribution, and additional event sources follow after this check.
+Tetragon process execution and Docker container identity are verified on
+Docker Desktop. See [the collector guide](docs/tetragon.md). Raw cgroup enrichment is
+deferred, and additional event coverage follows incrementally.
+
+Milestone 4's [Vector pipeline](docs/vector.md) reads Tetragon JSON, normalizes
+process events, and exposes a low-cardinality event counter. File ingestion,
+normalization, and counter labels are verified on Docker Desktop; a Prometheus rate
+query remains unverified.
+
+The root Compose definition is the lab entry point; all three containers and
+the combined Linux pipeline have passed live validation.
