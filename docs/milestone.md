@@ -39,9 +39,13 @@ test host.
 
 See [the Terraform lab setup](../terraform/README.md).
 
-**Still required before eBPF work**
+**Preflight result**
 
-1. Install `bpftool` on the GCP host and record `sudo bpftool feature probe kernel`.
+The BTF, cgroup, process-exec tracepoint, and OOM tracepoint checks pass. The
+installed GCP kernel tools do not include a usable `bpftool` binary, so its
+feature probe is unavailable on this Ubuntu image. This is not a blocker for
+Milestone 3: Tetragon startup is the functional check that its CO-RE programs
+can load on this host.
 
 ## Milestone 3: eBPF event pipeline and process execution
 

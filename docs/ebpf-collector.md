@@ -40,13 +40,40 @@ For Docker, package it as a dedicated agent image that runs once per host with t
 
 For Kubernetes, package the same agent image as a DaemonSet so one instance runs on each eligible node. Begin with a privileged development deployment, then replace it with the smallest verified capability and host-mount set after the required probes are known.
 
-## Raspberry Pi preflight
+## GCP collector-host preflight
 
 ~~~sh
+uname -m
+uname -r
 test -r /sys/kernel/btf/vmlinux && echo "BTF available"
-sudo bpftool feature probe kernel
+grep -E 'CONFIG_DEBUG_INFO_BTF(=y|_MODULES=y)' "/boot/config-$(uname -r)"
+stat -fc %T /sys/fs/cgroup
+cat /sys/fs/cgroup/cgroup.controllers
 sudo cat /sys/kernel/tracing/events/sched/sched_process_exec/format
 sudo test -r /sys/kernel/tracing/events/oom/mark_victim/format
 ~~~
 
-The first command confirms CO-RE metadata is present. The capability probe identifies supported BPF program and map types. The tracepoint format files define the fields available to the agent on this kernel.
+`bpftool` is a diagnostic aid, not a Tetragon prerequisite. Run the capability
+probe when the command is usable:
+
+~~~sh
+if sudo bpftool version; then
+  sudo bpftool feature probe kernel
+else
+  echo "bpftool is unavailable for this kernel; continue to Tetragon startup"
+fi
+~~~
+
+The BTF checks confirm that Tetragon can load its CO-RE programs on the running
+kernel. The cgroup checks confirm the memory controller needed for workload and
+OOM attribution. The tracepoint format files define the fields available from
+this kernel. `bpftool` reports the available BPF program, map, and helper
+features when a matching binary is available. On the current Ubuntu 24.04 GCP
+image, the `linux-tools-$(uname -r)` package is installed but does not ship
+`bpftool`, and the Ubuntu archive has no standalone `bpftool` package. Record
+that result and continue to Tetragon startup; its successful load is the
+collector's functional kernel check.
+
+The current Raspberry Pi kernel lacks BTF, so use the GCP Ubuntu test VM for
+this preflight. See [the Terraform lab setup](../terraform/README.md) for the
+IAP SSH command.
