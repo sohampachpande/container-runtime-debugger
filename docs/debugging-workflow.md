@@ -2,6 +2,13 @@
 
 This workflow diagnoses a Dockerized application that stops responding while handling a memory-intensive request.
 
+The default `compose.yaml` now runs Juice Shop. Start the original Python OOM
+workload explicitly before following this exercise:
+
+~~~sh
+docker compose -f compose.oom.yaml up --build --detach
+~~~
+
 ## Test setup
 
 The demo container has a 64 MiB memory limit. Trigger the failure with:

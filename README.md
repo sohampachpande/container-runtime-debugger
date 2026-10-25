@@ -1,6 +1,7 @@
 # Container Runtime Visibility
 
-An eBPF-assisted Linux debugging lab for Docker workloads. It correlates cgroup OOM kills with application logs and container resource metrics.
+An eBPF-assisted Linux runtime-security lab. Tetragon observes host and
+container process activity, with OWASP Juice Shop as the security demo workload.
 
 ## First milestone: diagnose an OOM kill
 
@@ -13,23 +14,45 @@ The demo service intentionally allocates memory until Docker's cgroup memory lim
 ## Run the demo
 
 ```sh
-docker compose up --build
-curl http://localhost:8080/healthz
-curl 'http://localhost:8080/allocate?mb=1024'
+docker compose up --detach
+curl --fail http://localhost:3000/
 docker compose ps
-docker compose logs demo-app
+docker compose logs juice-shop
 ```
 
-The compose file limits the container to 64 MiB. The 1 GiB request reliably terminates it after the kernel enforces that limit. Inspect the result with:
+The default workload uses the upstream `bkimminich/juice-shop:v20.3.0` image,
+binds port 3000 to loopback, and has a 384 MiB memory limit. Measure startup and
+runtime memory before adding more services to the small VM. For access from
+your Mac, open an SSH tunnel:
 
 ```sh
-docker inspect container-runtime-visibility-demo-app-1 \
-  --format 'OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}}'
+gcloud compute ssh runtime-visibility \
+  --project=container-runtime-visibility \
+  --zone=us-west1-b \
+  --tunnel-through-iap -- -L 3000:127.0.0.1:3000
 ```
+
+Then browse to [Juice Shop](http://localhost:3000).
+
+## Original OOM exercise
+
+The Python workload remains available separately through `compose.oom.yaml`:
+
+```sh
+docker compose -f compose.oom.yaml up --build --detach
+curl http://localhost:8080/healthz
+curl 'http://localhost:8080/allocate?mb=1024'
+```
+
+Its 64 MiB limit and diagnostic steps are documented in
+[the Docker OOM workflow](docs/debugging-workflow.md). Stop Juice Shop before
+running the OOM exercise on the small VM.
 
 ## Linux host requirement
 
-The eBPF milestone needs a Linux kernel with BTF support, `bpftool`, and permission to load tracing programs. Docker Desktop on macOS is fine for the application demo, but run the eBPF collector in a Linux VM or Linux host so it can access the relevant kernel tracepoints and cgroups.
+The eBPF milestone needs a Linux kernel with BTF support and permission to load
+tracing programs. `bpftool` is an optional diagnostic aid. Docker Desktop on
+macOS is fine for the application demo; use the GCP Linux VM for Tetragon.
 
 ## Debugging workflow
 
@@ -39,4 +62,6 @@ Follow [the Docker OOM debugging workflow](docs/debugging-workflow.md) to reprod
 
 ## Planned next milestone
 
-Write an eBPF tracepoint program for OOM events, pass the PID and cgroup identity to a Go userspace process, and export a Prometheus counter labelled by container identity. The incident write-up should show the symptom, trace evidence, application logs, root cause, and remediation.
+Install Tetragon and validate a process-execution JSON event against a live host
+process. Follow [the collector setup](docs/tetragon.md). Vector routing,
+container attribution, and additional event sources follow after this check.

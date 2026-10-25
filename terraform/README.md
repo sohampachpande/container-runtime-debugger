@@ -67,8 +67,9 @@ cat /sys/fs/cgroup/cgroup.controllers
 free -h
 ```
 
-The first gate is readable kernel BTF and cgroup v2. Docker and a BPF capability
-probe are still needed before marking the host preflight complete.
+The first gate is readable kernel BTF and cgroup v2. Successful Tetragon sensor
+loading and a live execution event provide the functional collector check.
+`bpftool` is a diagnostic aid, not an installation prerequisite.
 
 Verified on the provisioned VM on 2026-10-25:
 
@@ -80,8 +81,65 @@ Verified on the provisioned VM on 2026-10-25:
 - About 953 MiB total RAM, with no swap configured.
 - A subsequent Terraform plan reports no changes.
 
-This verifies the host's BTF prerequisite, not Tetragon compatibility. The BPF
-probe and collector startup remain to be tested on this kernel.
+The initial checks established prerequisites. Tetragon's base sensor and live
+host/container execution events were subsequently verified; see the software
+inventory below and [Milestone 3 evidence](../docs/milestone.md).
+
+## VM software inventory and installation
+
+Observed on 2026-10-25. Terraform itself does not install this software.
+
+| Software | Installation history and purpose |
+|---|---|
+| Docker Engine `29.1.3` | Already present before the collector session; runs the demo container |
+| Git, Python 3, curl, tar, less | Already present; repository access, downloads, package extraction, and event inspection |
+| Ubuntu kernel tools | Already present, but their `bpftool` wrapper cannot find a usable binary for this kernel |
+| Tetragon and tetra `v1.7.0` | Installed during the collector session from the upstream amd64 release archive, after SHA-256 checksum verification |
+| Bundled `bpftool v7.3.0` | Installed by that archive at `/usr/local/lib/tetragon/bpftool`; verified usable |
+| Tetragon BPF programs, support tools, and systemd unit | Installed by the same upstream installer under `/usr/local/` and `/usr/lib/systemd/system/` |
+| Original OOM image | Built from `demo-app/Dockerfile` as `runtime-visibility-demo-app:m3`, using `python:3.12-alpine`; retained for the separate OOM exercise |
+| Current security demo image | Pulled upstream `bkimminich/juice-shop:v20.3.0`; selected by the default `compose.yaml` |
+
+No APT packages were installed during this collector session. Docker Compose,
+Buildx, and Vector were not installed. Docker's existing legacy builder was
+sufficient for this demo image; no Tetragon source compilation was needed.
+
+The demo is running as `juice-shop-m3` with a 384 MiB memory limit and
+`127.0.0.1:3000` published on the VM. The previous `demo-app-m3` container is
+stopped, and its 64 MiB OOM exercise is retained in `compose.oom.yaml`.
+Juice Shop passed HTTP readiness and used about 136 MiB after startup;
+available host memory was about 245 MiB at that check. Tetragon is enabled on boot. Its active
+configuration is in `/etc/tetragon/tetragon.conf.d/`, and runtime event files
+are under `/var/log/tetragon/`. Keep development sources, configuration, and
+docs in `~/container-runtime-visibility` on the active branch on both machines.
+The Git and working-tree synchronization workflow is documented in
+[the Tetragon guide](../docs/tetragon.md#2-keep-development-files-in-the-repository).
+
+### Reproduce the collector installation
+
+APT does not use a universal `requirements.txt` convention. The repository's
+[`install-dep.sh`](install-dep.sh) lists its APT prerequisites explicitly:
+`ca-certificates`, `curl`, `git`, `less`, `python3`, and `tar`. It installs only
+missing packages, then downloads and verifies the pinned Tetragon release for
+a fresh installation. It does not install Docker, Compose, Buildx, or Vector.
+
+After synchronizing the repository, run **on the Ubuntu x86_64 VM**:
+
+```sh
+cd ~/container-runtime-visibility
+bash terraform/install-dep.sh
+```
+
+The script checks BTF and cgroup v2, requires sudo, and uses the repository's
+collector configuration. A fresh install enables and starts Tetragon. If
+Tetragon or tetra already exists, it leaves that deployment unchanged rather
+than reinstalling or upgrading it. Review the upstream installer as described
+in [the manual runbook](../docs/tetragon.md#3-install-and-check-startup) if desired.
+
+The script is not a Terraform provisioner and was added after the manual
+installation; the fresh-install path has not been executed on a clean VM.
+Installation alone does not complete Milestone 3: follow the guide to check
+sensor loading, resource use, and actual execution-event metadata.
 
 ## Stop or remove the lab
 
