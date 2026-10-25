@@ -11,18 +11,32 @@ The demo service intentionally allocates memory until Docker's cgroup memory lim
 2. The application logs its allocation progress before it exits.
 3. A later eBPF collector will observe the kernel OOM event and attribute it to the container cgroup.
 
-## Run the demo
+## Run the Linux lab
+
+The root Compose file declares separate Tetragon, Vector, and Juice Shop
+containers. Follow [the Compose setup guide](docs/compose.md) first to prepare
+the Linux host and persistent storage. The combined deployment and fresh
+host/container event pipeline are verified on the VM.
 
 ```sh
-docker compose up --detach
+sudo docker compose config --quiet
+sudo docker compose pull
+sudo docker compose up --detach
 curl --fail http://localhost:3000/
-docker compose ps
-docker compose logs juice-shop
+curl --fail http://localhost:9598/metrics
+sudo docker compose ps
+sudo docker compose logs --follow vector
 ```
 
-The default workload uses the upstream `bkimminich/juice-shop:v20.3.0` image,
-binds port 3000 to loopback, and has a 384 MiB memory limit. Measure startup and
-runtime memory before adding more services to the small VM. For access from
+After startup, run `sudo python3 scripts/verify-pipeline.py` on the VM to repeat
+the host/container event and counter checks.
+
+Tetragon observes the Linux host and writes raw JSON to
+`/var/log/tetragon/tetragon.log`. Vector reads it and emits normalized logs and
+event counters. Juice Shop uses `bkimminich/juice-shop:v20.3.0` on loopback port
+3000. The service limits are 256 MiB for Tetragon, 128 MiB for Vector, and
+384 MiB for Juice Shop; measure actual resource use on the small VM.
+For access from
 your Mac, open an SSH tunnel:
 
 ```sh
@@ -33,6 +47,11 @@ gcloud compute ssh runtime-visibility \
 ```
 
 Then browse to [Juice Shop](http://localhost:3000).
+
+For the application alone on macOS, use
+`docker compose up --detach juice-shop`. Stop the full Linux lab with
+`sudo docker compose down`; event files and Vector's external checkpoint
+volume are retained.
 
 ## Original OOM exercise
 
@@ -61,8 +80,16 @@ For a cloud Linux host, see [the Terraform GCP lab setup](terraform/README.md).
 
 Follow [the Docker OOM debugging workflow](docs/debugging-workflow.md) to reproduce the incident and diagnose it with application logs and Docker container state.
 
-## Planned next milestone
+## Collector and pipeline status
 
-Install Tetragon and validate a process-execution JSON event against a live host
-process. Follow [the collector setup](docs/tetragon.md). Vector routing,
-container attribution, and additional event sources follow after this check.
+Tetragon process execution and Docker container identity are verified on the
+VM. See [the collector guide](docs/tetragon.md). Raw cgroup enrichment is
+deferred, and additional event coverage follows incrementally.
+
+Milestone 4's [Vector pipeline](docs/vector.md) reads Tetragon JSON, normalizes
+process events, and exposes a low-cardinality event counter. File ingestion,
+normalization, and counter labels are verified on the VM; a Prometheus rate
+query remains unverified.
+
+The root Compose definition is the lab entry point; all three containers and
+the combined Linux pipeline have passed live validation.

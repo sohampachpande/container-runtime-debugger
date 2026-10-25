@@ -1,27 +1,48 @@
 # Tetragon collector
 
-## Scope and status
+## Deployment and status
 
-Run one Tetragon systemd service on the Ubuntu GCP VM. This first deployment
-uses the upstream native package so Docker is not a prerequisite. Dedicated
-container packaging remains a later step. No custom tracing policies are needed
-for the built-in process-execution events.
+The root `compose.yaml` runs one dedicated Tetragon container on the Linux
+host alongside Vector and Juice Shop. It uses `quay.io/cilium/tetragon:v1.7.0`;
+no source build or native package installation is required. See
+[the Compose guide](compose.md) for setup, validation, startup, and inspection.
 
-On 2026-10-25, Tetragon and tetra v1.7.0 were installed on the GCP VM. The base
-sensor loaded and exported a live execution event with a verified host PID and
-executable. The event did not include cgroup identity, so Milestone 3 remains
-incomplete. See [the recorded evidence](milestone.md#milestone-3-ebpf-event-pipeline-and-process-execution).
-Vector normalization belongs to Milestone 4.
+The containerized collector verified process execution, exit, and Docker
+container identity on the GCP VM on 2026-10-25. Its base BPF sensor loaded
+successfully, and exactly one collector process was active. Raw cgroup ID/path
+enrichment remains deferred. See [the milestone evidence](milestone.md).
 
-No Tetragon source checkout or build toolchain is needed: the upstream package
-includes the daemon, CLI, compiled BPF programs, and a working bundled
-`bpftool` at `/usr/local/lib/tetragon/bpftool`. The Ubuntu `bpftool` wrapper
-remains unusable for this kernel.
+## Host access and event export
 
-The package is pinned to `v1.7.0`, the version used in the upstream
-[package installation guide](https://tetragon.io/docs/installation/package/).
-Settings use the recommended administrator drop-ins from the
-[daemon configuration reference](https://tetragon.io/docs/reference/daemon-configuration/).
+The collector container loads eBPF programs into the Linux host kernel. Host
+PID and cgroup namespaces expose host processes and cgroup membership; the
+host BTF file supports loading CO-RE programs. Host UTS sharing preserves the
+host name in exported events. The initial development deployment uses
+privileged mode, following the upstream
+[container instructions](https://tetragon.io/docs/installation/container/).
+The full collector stack targets the Linux VM, not macOS Docker Desktop.
+
+Repository drop-ins under `collector/tetragon/tetragon.conf.d/` are mounted
+read-only into `/etc/tetragon/tetragon.conf.d/`. They configure JSON export,
+permissions, rotation, Kubernetes lookup, and local API endpoints. The image
+provides its own daemon, CLI, and BPF programs; it does not use the native
+package's `/usr/local/lib/tetragon/` files.
+
+Raw JSON is written to the host `/var/log/tetragon/tetragon.log`. Vector mounts
+that same directory read-only. The Tetragon container's gRPC Unix socket and
+loopback health endpoint are internal; no Tetragon API port is published.
+Only one collector should run on the node.
+
+```sh
+sudo docker compose logs --tail 100 tetragon
+sudo tail -f /var/log/tetragon/tetragon.log
+sudo docker compose exec tetragon tetra \
+  --server-address unix:///var/run/tetragon/tetragon.sock getevents -o compact
+```
+
+The first command shows diagnostics, the second shows the original JSON
+export, and the third displays a compact live event stream. Press Ctrl-C to
+stop following events.
 
 ## How process collection works
 
@@ -31,7 +52,7 @@ the events we captured. The service journal confirmed
 `Loaded sensor successfully` for `__base__`.
 
 ```text
-systemd starts Tetragon
+Compose starts the Tetragon container
   → Tetragon loads its built-in base eBPF sensor
   → sensor observes process execution and termination
   → Tetragon adds process, parent, and available container context
@@ -102,209 +123,19 @@ container identity, then integrate it with Vector. Broad file or network
 tracing can increase noise and overhead on the small VM. Vector normalization
 remains Milestone 4; further event coverage follows incrementally.
 
-## 1. Connect and check resources
+## Validate host and container identity
 
-Run from your Mac:
+Use [the Compose acceptance check](compose.md#3-verify-host-and-container-telemetry)
+after the collector reports successful base-sensor loading and is listening
+for events. Compare a fresh host execution with `/proc`, then check a Node.js
+execution inside Juice Shop against Docker's container ID.
 
-```sh
-gcloud compute ssh runtime-visibility \
-  --project=container-runtime-visibility \
-  --zone=us-west1-b \
-  --tunnel-through-iap
-```
+Tetragon's `process.docker` is a container ID prefix. It is not a human-readable
+container name or a raw cgroup ID. The earlier Python and Juice Shop tests
+verified this prefix against Docker and live cgroup membership. An injected
+`docker exec` process can have `in_init_tree: false` while still belonging to
+the correct container.
 
-Run the remaining commands on the VM. Check the running kernel and memory
-before installing another host service:
-
-```sh
-uname -m
-uname -r
-test -r /sys/kernel/btf/vmlinux && echo 'BTF available'
-stat -fc %T /sys/fs/cgroup
-free -m
-df -h / /tmp
-```
-
-Expect `x86_64`, readable BTF, and `cgroup2fs`. See
-[the full preflight](ebpf-collector.md#gcp-collector-host-preflight) if these
-checks differ from the recorded environment. BTF alone does not prove the BPF
-programs will load. Measure resource pressure before adding the demo or Vector;
-do not resize the VM automatically.
-
-## 2. Keep development files in the repository
-
-Keep source, collector configuration, and documentation in
-`~/container-runtime-visibility` on both the Mac and VM, using the same
-development branch (`m3/ebpf-collector` for this milestone). Do not use a
-separate configuration staging directory under the VM's home directory.
-
-For committed changes, use Git to synchronize: commit and push from the
-machine where the change was made when ready and authorized, then update the
-other checkout. Check for local edits before switching or pulling; reconcile
-them rather than overwriting them.
-
-```sh
-cd ~/container-runtime-visibility
-git status --short --branch
-git fetch origin
-git switch m3/ebpf-collector
-git pull --ff-only
-```
-
-The uncommitted milestone files were explicitly copied from the Mac checkout
-to the same paths in the VM checkout and verified by SHA-256 hashes. This is
-a snapshot transfer, not automatic bidirectional synchronization. Before
-transferring further uncommitted work, compare both working trees and agree
-which copy is authoritative; do not copy `.git`, Terraform state, credentials,
-or runtime captures between machines.
-
-The repository is the source of truth for our configuration. Tetragon still
-reads its active configuration from `/etc/tetragon/tetragon.conf.d/`, writes
-runtime events under `/var/log/tetragon/`, and uses binaries installed under
-`/usr/local/`. These are deployment artifacts, not additional source checkouts.
-Updating Git files alone does not apply configuration to the running service.
-
-For a fresh installation, install the repository drop-ins before running the
-upstream installer, which starts the service. If Tetragon is already installed,
-inspect its active configuration before replacing settings. Run on the VM:
-
-```sh
-cd ~/container-runtime-visibility
-sudo install -d -m 0755 /etc/tetragon/tetragon.conf.d
-sudo install -m 0644 collector/tetragon/tetragon.conf.d/* \
-  /etc/tetragon/tetragon.conf.d/
-sudo install -d -m 0700 /var/log/tetragon
-```
-
-For an existing deployment, restart Tetragon after reviewing and applying
-configuration changes, then check the service journal and event export again.
-
-The drop-ins disable Kubernetes lookup, select the JSON event file, restrict
-event-file access to root, and retain two rotated 10 MB files plus the active
-file. The gRPC endpoint uses a local Unix socket; the health endpoint is bound
-to `127.0.0.1:6789`. These settings do not reduce
-the memory needed by Tetragon's BPF maps or process cache. Diagnostic service
-logs are separate from the JSON events.
-
-## 3. Install and check startup
-
-Download the pinned amd64 package into a fresh temporary directory. Inspect
-the bundled installer before executing it as root:
-
-```sh
-tetragon_download_dir=$(mktemp -d)
-cd "$tetragon_download_dir"
-curl --fail --location --remote-name \
-  https://github.com/cilium/tetragon/releases/download/v1.7.0/tetragon-v1.7.0-amd64.tar.gz
-curl --fail --location --remote-name \
-  https://github.com/cilium/tetragon/releases/download/v1.7.0/tetragon-v1.7.0-amd64.tar.gz.sha256sum
-sha256sum --check tetragon-v1.7.0-amd64.tar.gz.sha256sum
-tar -xzf tetragon-v1.7.0-amd64.tar.gz
-cd tetragon-v1.7.0-amd64
-less install.sh
-sudo ./install.sh
-tetra version
-sudo systemctl status tetragon --no-pager --full
-sudo journalctl -u tetragon -n 100 --no-pager
-sudo systemctl show tetragon -p MemoryCurrent -p NRestarts
-free -m
-```
-
-Success requires a running service, successful sensor loading in its logs,
-and actual JSON events in the next step. An active systemd unit alone is
-insufficient. If startup fails, retain the journal output and check resource
-pressure before changing any settings:
-
-```sh
-sudo journalctl -k -n 100 --no-pager
-```
-
-Do not repeatedly restart a failing collector or increase VM size without
-reviewing the failure. To end the exercise and release collector resources:
-
-```sh
-sudo systemctl stop tetragon
-```
-
-The upstream installer enables the service on boot. Stopping it ends the
-current run; `sudo systemctl disable tetragon` also prevents automatic startup.
-
-## 4. Capture a live process execution
-
-Wait for `Listening for events...` in the service journal before starting the
-probe. After successful startup, run this on the VM in the same interactive shell.
-The background process stays alive for five minutes so `/proc` can be inspected:
-
-```sh
-/usr/bin/sleep 300 &
-probe_pid=$!
-printf 'Expected host PID: %s\n' "$probe_pid"
-readlink "/proc/$probe_pid/exe"
-cat "/proc/$probe_pid/cgroup"
-ps -p "$probe_pid" -o pid,comm,args
-sudo tail -n 100 /var/log/tetragon/tetragon.log
-```
-
-Find the `process_exec` record whose `process.pid` matches `probe_pid` and whose
-`process.binary` identifies `sleep`. Require execution flags such as
-`execve clone`: a record flagged `procFS` reflects startup discovery of an
-existing process and does not prove a new execution was observed.
-Inspect the full record, including any
-workload or cgroup fields, rather than assuming a cgroup field exists. If it
-has not appeared yet, follow the file with
-`sudo tail -f /var/log/tetragon/tetragon.log` and stop following with Ctrl-C.
-
-The `/proc/<pid>/cgroup` entry is independent host evidence of cgroup membership;
-it does not prove that the JSON event contains that identity. If the event
-lacks cgroup identity, record that gap and choose enrichment only after
-reviewing the actual schema. This host-process probe establishes collection;
-demo-container attribution remains a later validation.
-
-Let the probe exit naturally. Keep raw events on the VM: command arguments and
-host metadata may contain sensitive data. Share only the probe's redacted event,
-expected PID, executable, and cgroup entry. Record the Tetragon version, kernel,
-startup result, and measured memory use in `docs/milestone.md` after validation.
-
-## 5. Test Docker container identity
-
-The current workload is OWASP Juice Shop. The Compose plugin is not installed
-on this VM, so the verified deployment uses Docker directly with the same
-image, memory limit, and port mapping as `compose.yaml`. The following commands
-assume the container name and port are unused. Reuse the running container if
-it already exists.
-
-```sh
-cd ~/container-runtime-visibility
-sudo docker pull bkimminich/juice-shop:v20.3.0
-sudo docker run --detach --name juice-shop-m3 --memory=384m \
-  --publish 127.0.0.1:3000:3000 bkimminich/juice-shop:v20.3.0
-```
-
-Once the app has started, verify HTTP readiness and identify its main process:
-
-```sh
-curl --fail --silent --output /dev/null http://127.0.0.1:3000/
-sudo docker inspect juice-shop-m3 \
-  --format 'ID={{.Id}} HostPID={{.State.Pid}} MemoryLimit={{.HostConfig.Memory}}'
-sudo docker top juice-shop-m3 -eo pid,args
-sudo docker stats --no-stream juice-shop-m3
-sudo tail -n 30 /var/log/tetragon/tetragon.log
-```
-
-Match the Node.js startup execution's host PID to Docker's main process PID.
-The event should include `process.docker`, matching a prefix of Docker's full
-container ID. Do not assume a fixed prefix length. Inspect the actual event
-rather than expecting the Python executable used by the original demo.
-
-While the process is alive, inspect `/proc/<host-pid>/cgroup` and compare its
-membership with the container ID. This VM uses systemd
-`docker-<full-container-id>.scope` cgroups. The earlier Python startup and
-`docker exec` sleep test also established that Tetragon distinguishes the
-container's init tree (`in_init_tree: true`) from an injected execution
-(`false`). See [the milestone evidence](milestone.md) for both tests.
-
-The test proves native Docker container identity without a custom resolver.
-It does not prove raw cgroup identity is exported: that field is still absent.
-The original Python OOM exercise remains in `compose.oom.yaml`; Juice Shop
-does not provide its `/healthz` or `/allocate` endpoints. Run one demo workload
-at a time on the small VM.
+A record flagged `procFS` is startup discovery of an existing process; use a
+fresh execution to demonstrate a new kernel observation. Flags are debugging
+metadata, not stable detection-rule inputs. Store raw captures outside Git.
