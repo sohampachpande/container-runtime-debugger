@@ -2,6 +2,13 @@
 
 This workflow diagnoses a Dockerized application that stops responding while handling a memory-intensive request.
 
+The default `compose.yaml` now runs Juice Shop. Start the original Python OOM
+workload explicitly before following this exercise:
+
+~~~sh
+docker compose -f compose.oom.yaml up --build --detach
+~~~
+
 ## Test setup
 
 The demo container has a 64 MiB memory limit. Trigger the failure with:
@@ -15,7 +22,7 @@ An empty reply from the server means the service stopped while processing the re
 ## 1. Inspect application logs
 
 ~~~sh
-docker logs container-runtime-visibility-demo-app-1
+docker logs container-runtime-visibility-test-app-1
 ~~~
 
 The demo logs allocation progress every 8 MiB. If logging stops during allocation, the process likely terminated before it could return a response.
@@ -23,7 +30,7 @@ The demo logs allocation progress every 8 MiB. If logging stops during allocatio
 ## 2. Inspect the container exit state
 
 ~~~sh
-docker inspect container-runtime-visibility-demo-app-1 \
+docker inspect container-runtime-visibility-test-app-1 \
   --format 'Running={{.State.Running}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}}'
 ~~~
 
@@ -38,7 +45,7 @@ OOMKilled=true attributes the termination to the Linux kernel's out-of-memory ha
 ## 3. Confirm the configured limit
 
 ~~~sh
-docker inspect container-runtime-visibility-demo-app-1 \
+docker inspect container-runtime-visibility-test-app-1 \
   --format 'Memory={{.HostConfig.Memory}}'
 ~~~
 
@@ -56,7 +63,7 @@ Memory-intensive request
 
 ~~~sh
 # Observe current CPU and memory use while reproducing the issue.
-docker stats container-runtime-visibility-demo-app-1
+docker stats container-runtime-visibility-test-app-1
 
 # Observe container lifecycle events.
 docker events
