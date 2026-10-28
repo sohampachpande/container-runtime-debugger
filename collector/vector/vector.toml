@@ -63,6 +63,13 @@ inputs = ["normalize.dropped"]
 target = "stderr"
 encoding.codec = "json"
 
+[sinks.staging]
+type = "file"
+inputs = ["normalize"]
+path = "/var/lib/vector/staging/events-%Y-%m-%d.jsonl"
+timezone = "UTC"
+encoding.codec = "json"
+
 [sinks.metrics]
 type = "prometheus_exporter"
 inputs = ["event_counter"]
