@@ -90,3 +90,17 @@ The full Compose deployment is verified on Docker Desktop. Run
 `python3 scripts/verify-pipeline.py --desktop` for the repeatable acceptance
 check. It validates event correlation and counter labels; it does not execute
 a Prometheus rate query or test checkpoint recovery.
+
+## Milestone 5 staging addition
+
+The new `staging` sink writes the existing normalized execution/exit envelope
+as JSONL under `/var/lib/vector/staging/` on the persistent checkpoint volume.
+Its configuration parses, but the changed configuration still needs pinned-image
+validation and a live acceptance run. No new event-schema mappings are enabled:
+file/network kprobe records still use the rejection output.
+
+Use [the batch ingestion guide](datastore-ingestion.md) to stop/flush Vector,
+copy completed files, and convert/import them into Parquet and DuckDB. Date-based
+filenames can be reopened by late events, so do not convert active files.
+Staging retention is not automatically bounded; measure usage and implement
+cleanup before relying on unattended capture.

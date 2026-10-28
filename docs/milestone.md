@@ -217,21 +217,49 @@ kills or automatic restarts. Measured memory was about 75 MiB for Tetragon,
 41 MiB for Vector, and 102 MiB for Juice Shop. See
 [the local Desktop guide](docker-desktop.md) for reproducible commands.
 
-## Milestone 5: Collector event coverage and container attribution
+## Milestone 5: Security event coverage and searchable storage
 
-Make the pipeline able to process every event schema emitted by the collector without adding event-specific pipeline logic. Expand collector coverage incrementally, beginning with OOM victims and then file-access patterns.
+Collect process execution, sensitive-file access, and network connections through
+one shared Vector pipeline, then retain the events in a queryable datastore.
+OOM collection is removed from this milestone; the original OOM exercise remains
+available separately. See [the implementation plan](../plans/milestone-5-datastore-plan.md).
+The [datastore decision](datastore.md) selects local JSONL staging, Parquet batch
+conversion, and ingestion into native DuckDB tables. ClickHouse is the preferred
+next step if continuous ingestion or shared query serving is needed. Storage
+integration and local end-to-end validation remain pending.
+
+Implementation started on 2026-10-27: observation-only file/network policies,
+Compose policy mounts, and a controlled Node.js probe are added. Syntax checks
+pass; live policy loading and raw-event evidence are pending. Vector changes
+for new categories follow those checks. The existing execution/exit envelope
+now has a staging sink, pending pinned-image validation. An initial Parquet/
+DuckDB importer passes 10 offline tests, including retries and rollback;
+all-category live storage acceptance remains pending. See
+[the raw-event guide](security-events.md).
 
 **Success criteria**
 
 1. Process execution events identify the current Juice Shop demo workload.
-2. OOM events identify the victim process and, when available, the affected container.
-3. File-access events include the accessing process, target path, and available workload identity.
-4. Vector handles process execution, OOM, and file-access events through the same normalized event pipeline.
-5. The output includes cgroup identity and container identity when available.
+2. Sensitive-file observations include the accessing process, target path,
+   operation semantics, and available workload identity.
+3. Network observations initially cover outbound TCP connection attempts and
+   include process, destination IP/port, and available workload identity;
+   distinguish attempts from successful connections.
+4. Vector handles all three categories through shared normalization while
+   preserving the original event and event-specific payload.
+5. The output includes cgroup identity and container identity when available,
+   with missing metadata explicitly documented.
+6. Fresh events from all three categories pass through local JSONL staging,
+   Parquet conversion, and native DuckDB tables, queryable by time, workload,
+   and category. Verify persistence, bounded outage recovery, duplicate-safe
+   import, rollback, retention, and local resource use.
 
 **Future security coverage**
 
-Additional event types are intentionally TBD after OOM and file-access patterns are validated. Candidates include process exit, outbound connections, and privilege-related activity.
+Additional coverage is chosen after the three categories are validated.
+Candidates include inbound connections, UDP activity, and privilege-related
+events. Process exit remains part of the existing process lifecycle pipeline.
+UI, alert rules, and a custom API follow the initial DuckDB SQL query checks.
 
 ## Milestone 6: Agent packaging
 
@@ -247,7 +275,9 @@ Package the agent as a dedicated Docker image and prepare a Kubernetes DaemonSet
 
 ### Platform-backed anomaly detection
 
-Evaluate a search and analytics platform, beginning with OpenSearch, for raw-event retention and statistical anomaly scoring.
+Evaluate platform-backed anomaly scoring when the local analytical workflow
+needs a shared service. Follow [the datastore decision](datastore.md); no
+platform-backed anomaly engine has been selected or validated.
 
 **Success criteria**
 

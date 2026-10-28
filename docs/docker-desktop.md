@@ -64,6 +64,11 @@ events...`, and for Vector to begin watching the raw event file.
 
 ## Repeat the live acceptance check
 
+The existing check below validates Milestone 4 execution/exit telemetry.
+For the new Milestone 5 policy-loading and file/network probes, follow
+[the security-event guide](security-events.md). Those probes are not yet
+part of the existing acceptance script.
+
 ```sh
 docker pull ubuntu:24.04
 python3 scripts/verify-pipeline.py --desktop
