@@ -225,17 +225,41 @@ OOM collection is removed from this milestone; the original OOM exercise remains
 available separately. See [the implementation plan](../plans/milestone-5-datastore-plan.md).
 The [datastore decision](datastore.md) selects local JSONL staging, Parquet batch
 conversion, and ingestion into native DuckDB tables. ClickHouse is the preferred
-next step if continuous ingestion or shared query serving is needed. Storage
-integration and local end-to-end validation remain pending.
+next step if continuous ingestion or shared query serving is needed.
 
-Implementation started on 2026-10-27: observation-only file/network policies,
-Compose policy mounts, and a controlled Node.js probe are added. Syntax checks
-pass; live policy loading and raw-event evidence are pending. Vector changes
-for new categories follow those checks. The existing execution/exit envelope
-now has a staging sink, pending pinned-image validation. An initial Parquet/
-DuckDB importer passes 10 offline tests, including retries and rollback;
-all-category live storage acceptance remains pending. See
-[the raw-event guide](security-events.md).
+**Core path verified on Docker Desktop, 2026-10-27; milestone in progress**
+
+1. Tetragon enabled both observation-only policies. A fresh Node.js probe
+   produced execution/exit, file-permission, and TCP-attempt records sharing an
+   execution ID and matching Juice Shop's Docker identity. Protected/control
+   paths and a non-Node negative probe behaved as configured.
+2. Vector's common envelope maps the two policy/hook combinations into file
+   and network categories, preserves original JSON, and retains optional null
+   context. Pinned-image validation and 11 transform tests passed; the existing
+   process acceptance check passed with bounded metric labels.
+3. All 11 fresh probe records (2 process, 8 file, 1 network) survived staging,
+   Parquet conversion, and native DuckDB with exact original-object equality.
+   The completed batch imported 591 records; retry inserted zero duplicates.
+   Reopened read-only queries and all four saved SQL investigations passed.
+4. Ten offline ingestion tests cover types, raw preservation, optional fields,
+   duplicates, malformed inputs, post-publication retry, and transactional
+   rollback. The Python dependency list includes `pytz` for timezone-aware
+   query results.
+5. An isolated pinned Vector test recovered unread records from a retained
+   rotated backup and new active file after restart without replaying the
+   checkpointed record. Counters retained their value after 65 idle seconds.
+6. Measured memory was about 97 MiB Tetragon, 44 MiB Vector, and 118 MiB Juice
+   Shop, within existing limits. The 591-record batch took about 115 ms to
+   convert/import; one execution-ID query took about 1 ms. These are small
+   local measurements, not sustained throughput or capacity evidence.
+
+The milestone remains open for retention/disk-budget cleanup and sustained-load/
+crash-recovery acceptance. Collector-driven rotation and full-disk behavior
+remain unverified; no automatic ingestion scheduler or expiry exists. The file
+scope is the Node.js protected probe prefix, and networking covers Node.js TCP
+attempts. IPv6, refused connections, broader executable coverage, and raw cgroup
+export remain unverified. See [the raw-event guide](security-events.md) and
+[storage evidence and limits](datastore-ingestion.md#verification-and-limits).
 
 **Success criteria**
 

@@ -53,6 +53,10 @@ class IngestTests(unittest.TestCase):
                     f"SELECT event_time AT TIME ZONE 'UTC', process_exec_id, container_id_prefix, normalized_event FROM {relation}",
                     parameters).fetchone()
                 self.assertEqual(row[0], datetime.datetime(2026, 10, 27, 12, 0, 0, 123456))
+                instant = connection.execute(
+                    f'SELECT event_time FROM {relation}', parameters).fetchone()[0]
+                self.assertEqual(instant, datetime.datetime(
+                    2026, 10, 27, 12, 0, 0, 123456, tzinfo=datetime.timezone.utc))
                 self.assertEqual(connection.execute(
                     f'SELECT typeof(event_time) FROM {relation}', parameters).fetchone()[0],
                     'TIMESTAMP WITH TIME ZONE')

@@ -2,8 +2,9 @@
 
 Decision date: 2026-10-27.
 Status: local JSONL staging, Parquet conversion, and native DuckDB tables are
-selected. An initial schema-v1 batch importer passes 10 offline tests; live
-all-category validation remains pending. ClickHouse is
+selected. The schema-v1 batch importer passes 10 offline tests, and all three
+categories passed local end-to-end validation on 2026-10-27. Retention cleanup
+and sustained-load/crash recovery remain pending. ClickHouse is
 the preferred next datastore if serving or ingestion requirements outgrow this
 design. This supersedes the OpenSearch proposal.
 
@@ -76,8 +77,9 @@ a real-time view of every incoming event.
 DuckDB reads JSON with explicit common column types to produce Parquet. Retain
 the complete normalized event, including original Tetragon data, as JSON beside
 typed investigation columns. The initial importer pins DuckDB 1.4.1 and supports
-the existing schema-v1 envelope; new typed file/network fields await live schema
-verification. See [the implementation and commands](datastore-ingestion.md).
+the schema-v1 envelope. Vector maps live-verified file/network details into
+the preserved JSON; typed common columns support time/workload queries. See
+[the implementation, measurements, and commands](datastore-ingestion.md).
 [DuckDB JSON loading](https://duckdb.org/docs/stable/data/json/overview)
 
 Parquet is selected for retained, portable analytical batches and replay into

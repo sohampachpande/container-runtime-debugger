@@ -1,7 +1,7 @@
 # Local Docker Desktop lab
 
 Docker Desktop is the default environment for ongoing development on
-`m4/pipeline`. Always combine `compose.yaml` and `compose.desktop.yaml` with
+`m5/datastore`. Always combine `compose.yaml` and `compose.desktop.yaml` with
 project name `runtime-visibility-desktop`, as shown below. The GCP VM remains
 available for native Linux validation.
 
@@ -85,6 +85,13 @@ A second probe executes Node.js inside Juice Shop. Raw events and Linux
 Docker access rather than access to a macOS `/var/log/tetragon` path. Expected
 output includes `observed_node: docker-desktop` and the LinuxKit kernel version.
 The temporary helper exits and is removed; the lab containers stay running.
+The revised check snapshots retained raw-record fingerprints before probing,
+then searches the active file and timestamped rotated `.log` backups for new
+records. It avoids reusing an offset after rotation, but scans retained logs on
+each poll and is intended for this bounded lab, not high-volume operation.
+The revised reader passed a live execution/exit acceptance run on 2026-10-27.
+Both additional tracing policies and the all-category storage path passed
+their separate checks; see [the storage evidence](datastore-ingestion.md#verification-and-limits).
 
 ## Inspect output and stop
 

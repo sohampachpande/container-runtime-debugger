@@ -19,15 +19,17 @@ already supports efficient analytics without requiring Parquet.
 
 ## Execution agreement and status
 
-Implement one step at a time and validate before proceeding. The user runs the
-Docker commands after their purpose is explained. No cloud changes, commits,
-or pushes. OOM collection is dropped; preserve the original OOM exercise.
+Implement one step at a time and validate before proceeding. The user authorized
+two commits (docs/planning, then code) and then local Docker validation. Those
+commits are `7eb4468` and `4cd602d`; subsequent schema and validation follow-ups
+are documented below. No cloud changes or pushes. OOM collection is dropped;
+preserve the original OOM exercise.
 
 | Step | Deliverable | Current status |
 |---|---|---|
-| 1 | Three event categories and controlled raw-event probes | Policies, Compose mounts, and probe added; syntax checks passed; live loading/capture pending |
-| 2 | Uniform Vector schema and persistent staging output | Execution/exit file sink added; pinned-image validation and file/network mapping pending |
-| 3 | Local Parquet conversion and native DuckDB ingestion | Initial schema-v1 batch importer implemented; 10 offline tests pass; live all-category validation pending |
+| 1 | Three event categories and controlled raw-event probes | Passed on Desktop: policies enabled, execution correlation, Docker attribution, path/binary negatives |
+| 2 | Uniform Vector schema and persistent staging output | Passed: 11 pinned-image tests, live all-category staging, exact raw preservation, bounded labels |
+| 3 | Local Parquet conversion and native DuckDB ingestion | Core path passed: 10 offline tests, 591 live records, duplicate-safe retry, reopened DB, saved queries; retention/load/crash acceptance pending |
 
 The storage foundation can be developed against the existing verified envelope
 without guessing new kernel fields. This does not bypass step 1's live-event
@@ -69,13 +71,13 @@ excluded. A policy-loading error is a failed check, not an optional success.
 
 **Gate:** actual raw records for all three categories, documented event semantics,
 positive/negative filter checks, and no regression in execution/exit collection.
-The new policies are not live-verified yet. The existing Vector transform
-rejects their kprobe events until step 2; inspect Tetragon's raw file first.
+This gate passed on Docker Desktop on 2026-10-27. IPv6 and refused-connection
+probes remain additional coverage beyond the successful IPv4 attempt probe.
 
 ## 2. Process events through a uniform Vector schema
 
 Inspect captured JSON and the pinned Tetragon API before field mapping. Use one
-shared envelope with schema version, event time in UTC, event ID, collector,
+shared envelope with schema version, event time in UTC, collector,
 transport event type, bounded security category, host, optional process/parent/
 container context, policy/hook identity, typed file/network details, and original
 `tetragon` JSON. Missing optional fields remain null.
@@ -89,7 +91,7 @@ separate unsupported route; malformed records go to rejection output.
 
 Add a persistent JSONL staging sink with an explicit schema version. Retain
 console output for inspection and only bounded labels for metrics. Stable event
-IDs must survive replay: derive them from canonical original event content if
+IDs are assigned during Parquet projection and must survive replay: derive them from canonical original event content if
 no suitable native identifier exists; document that identical exported records
 are deduplicated, not that every kernel action is uniquely identified.
 
@@ -132,6 +134,15 @@ once delivery without testing it.
 Resolve the prior Milestone 4 source-rotation/outage and acceptance-reader
 findings before claiming recovery, and counter expiration before stable rate
 behavior. These are focused prerequisites, not new collection features.
+
+Follow-up configuration includes retained rotated `.log` files, reads new
+files from the beginning, and disables exporter counter expiration. An isolated
+pinned-image stop/rotation/restart test recovered both unread records without
+replaying the checkpointed record; a 65-second idle check retained the counter.
+The acceptance reader now compares
+retained raw-record fingerprints rather than reapplying a byte offset after
+rotation, and each probe gets a unique marker. Its live process acceptance check
+passed. Collector-driven rotation under load and crash recovery remain untested.
 
 **Gate:** tests for conversion types and counts, optional fields, raw JSON,
 repeated inputs, overlapping batches, conversion/import failure, and rollback.

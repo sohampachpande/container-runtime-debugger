@@ -1,8 +1,28 @@
 # Milestone 5: raw security-event probes
 
-Status: initial policies and probe implemented on 2026-10-27. YAML and Node.js
-syntax checks pass; kernel loading and event capture remain unverified.
+Status: both policies loaded and controlled probes passed on Docker Desktop
+on 2026-10-27 (event timestamps are 2026-10-28 UTC).
 This is step 1 of [the action plan](../plans/milestone-5-datastore-plan.md).
+
+## Verified local evidence
+
+- Tetragon v1.7.0 enabled both policies on ARM64 `7.0.14-linuxkit` in
+  observation mode. The existing execution/exit acceptance check also passed.
+- One fresh Node.js execution produced 2 process lifecycle records, 8 file
+  permission records, and 1 TCP-connect record. All shared one execution ID.
+  Docker ID prefixes matched Juice Shop; its main process's live cgroup
+  independently confirmed container membership. No raw cgroup field was added.
+- File arguments contain `file_arg.path` and a separate `int_arg` mask;
+  the return is `return.int_arg`. Masks 2 and 4 appeared for writes and reads,
+  with result 0. Directory checks and repeated-looking checks also appeared.
+- The socket argument contains family, protocol, source/destination address
+  and port, and state. The IPv4 probe reported `TCP_SYN_SENT`; application
+  success was checked separately, not inferred from that state.
+- The Node.js control path and a non-Node shell/`cat` access to a protected
+  prefix were absent from file-policy output.
+- All 11 fresh records reached normalized staging, Parquet, and reopened
+  DuckDB with exact original-object preservation. See
+  [the storage evidence](datastore-ingestion.md#verification-and-limits).
 
 ## Observations and limits
 
@@ -46,7 +66,8 @@ or all processes inside that container. It keeps the first exercise focused.
 | Python interpreter or a Python-based agent | Excluded | Excluded |
 | A different executable launched by Node.js, such as `curl` | Excluded | Excluded |
 
-These describe intended selector behavior; live filter verification is pending.
+The live negative probe verifies exclusion of shell/`cat`; the other executable
+examples describe the configured selector, not separately tested interpreters.
 The base sensor still collects execution/exit independently of these selectors,
 so an excluded Python process can have execution telemetry without file/network
 telemetry. Executing native library code inside a matching Node.js process does
@@ -145,10 +166,10 @@ compare live cgroup membership using the container's main host PID. Retain
 sanitized sample schemas for the next step. Repeat the existing process
 acceptance check once the stack is ready.
 
-The current Vector configuration accepts only execution and exit events.
-New `process_kprobe` events go to its rejection stream until step 2. That does
-not imply Tetragon failed; this step's evidence comes from the raw capture.
-Do not mark Milestone 5 complete after this probe.
+Vector now maps both policies into `file` and `network` categories alongside
+process lifecycle records. Unknown valid payloads remain `other` with their
+original data preserved. See [the envelope](vector.md#event-and-metric-choices).
+This raw probe alone does not establish storage or operational acceptance.
 
 ## Disable a policy
 
