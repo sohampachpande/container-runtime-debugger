@@ -95,6 +95,10 @@ their separate checks; see [the storage evidence](datastore-ingestion.md#verific
 
 ## Inspect output and stop
 
+The optional [query dashboard](datastore-ui.md) adds a fourth container using
+the `ui` profile. It reads Vector's staging volume read-only and owns a separate
+datastore volume. Include `--profile ui` when managing the full stack with it.
+
 ```sh
 docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml logs --follow vector

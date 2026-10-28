@@ -105,8 +105,9 @@ The initial project does not include a platform-backed anomaly engine. Start wit
 
 OpenSearch was considered and not selected for the current SQL analytical
 workflow. DuckDB is the initial query engine, with ClickHouse as the preferred
-next step if measured ingestion or query-serving needs require it. Neither
-UI nor alerting is supplied by the initial local batch design.
+next step if measured ingestion or query-serving needs require it. The optional
+[local dashboard](datastore-ui.md) adds charts and a read-only SQL editor in a
+separate container; alerting and a custom application API remain future work.
 
 ## Long-term target: AI agent runtime monitoring
 

@@ -152,7 +152,11 @@ resource use, and query latency. Mark unsupported or unverified cases explicitly
 
 ## Completion and follow-on work
 
-Update milestone evidence only after each gate passes. UI, application API,
-alerts, broader file coverage, inbound networking, UDP, and DNS attribution follow
-this milestone. ClickHouse remains the preferred future server if measured
+Update milestone evidence only after each gate passes. The user added an
+optional [local UI](../docs/datastore-ui.md) on 2026-10-28: a separate container
+reads Vector staging read-only, imports complete-line snapshots, and owns the
+native database for charts and bounded SQL queries. This does not close the
+outstanding retention/load/crash gates. Application API, alerts, broader file
+coverage, inbound networking, UDP, and DNS attribution remain follow-on work.
+ClickHouse remains the preferred future server if measured
 shared-ingestion/query requirements justify it.

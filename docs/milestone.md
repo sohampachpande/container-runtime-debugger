@@ -285,6 +285,14 @@ Candidates include inbound connections, UDP activity, and privilege-related
 events. Process exit remains part of the existing process lifecycle pipeline.
 UI, alert rules, and a custom API follow the initial DuckDB SQL query checks.
 
+An optional [local query dashboard](datastore-ui.md) was added alongside
+Milestone 5 on 2026-10-28 at the user's request. It runs DuckDB and Streamlit in
+its own container, reads Vector staging read-only, and imports complete-line
+snapshots on demand into a separate persistent volume. It supplies category/
+workload/time filters, charts, event inspection, and a bounded read-only SQL
+editor. The original host batch workflow remains available. This does not
+complete Milestone 5's outstanding retention and operational acceptance work.
+
 ## Milestone 6: Agent packaging
 
 Package the agent as a dedicated Docker image and prepare a Kubernetes DaemonSet manifest.

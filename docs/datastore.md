@@ -123,8 +123,13 @@ recovery rather than assuming exactly-once processing.
 
 ## UI, API, and alerts
 
-Begin with saved SQL investigations for all three event categories. A future
-local API can own the DuckDB database and serve queries alongside batch imports,
+The optional [local dashboard](datastore-ui.md) runs DuckDB and Streamlit in a
+separate container. It reads Vector's volume read-only, imports immutable
+complete-line snapshots on demand, and owns its database on a separate volume.
+It supplies filters, charts, event inspection, and a read-only SQL editor.
+The original host-side batch workflow remains supported for separate databases.
+
+A future local API can own the DuckDB database and serve queries alongside batch imports,
 returning bounded, paginated results. We must implement its access controls and query scheduling;
 DuckDB does not supply the project's API or alert service merely by being used.
 
@@ -164,4 +169,5 @@ Parquet, and native DuckDB tables. Verify persistence, completed-capture
 boundaries, schema and original-payload preservation, malformed input isolation,
 duplicate-safe imports, rollback, retention of each representation, and bounded
 outage recovery. Record capture size, conversion/import/query duration, peak
-memory, and freshness. UI, a custom API, and alerting remain follow-on work.
+memory, and freshness. The optional local UI is implemented separately; shared
+serving, a custom API, and alerting remain follow-on work.

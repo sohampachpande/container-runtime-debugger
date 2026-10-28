@@ -7,6 +7,11 @@ records passed through Vector, staging, Parquet, and reopened DuckDB on
 [the action plan](../plans/milestone-5-datastore-plan.md) and
 [the datastore decision](datastore.md).
 
+These commands describe the host-side CLI workflow. The optional
+[containerized dashboard](datastore-ui.md) instead reads Vector's shared volume
+and creates completed snapshots when you choose **Import latest**; it owns a
+separate database and does not require a host Python environment.
+
 ## What is implemented
 
 1. Vector's `staging` file sink writes normalized process/file/network events to
