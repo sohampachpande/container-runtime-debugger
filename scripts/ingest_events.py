@@ -23,6 +23,7 @@ COLUMNS = {
     'normalized_event': 'JSON',
 }
 EVENT_TABLE = ', '.join(f'{name} {kind}' for name, kind in COLUMNS.items())
+VALIDATION_BATCH_ROWS = 512
 
 
 def canonical(value):
@@ -74,15 +75,28 @@ def project(event):
 
 
 def validate_parquet(connection, parquet):
-    difference = connection.execute('''
-        SELECT count(*) FROM (
-            (SELECT * FROM batch EXCEPT ALL SELECT * FROM read_parquet(?))
-            UNION ALL
-            (SELECT * FROM read_parquet(?) EXCEPT ALL SELECT * FROM batch)
-        )
-    ''', [str(parquet), str(parquet)]).fetchone()[0]
-    if difference:
-        raise ValueError(f'Parquet content does not match the completed capture: {parquet}')
+    mismatch = f'Parquet content does not match the completed capture: {parquet}'
+    rows = connection.execute('SELECT count(*) FROM batch').fetchone()[0]
+    if connection.execute('SELECT count(*) FROM read_parquet(?)',
+                          [str(parquet)]).fetchone()[0] != rows:
+        raise ValueError(mismatch)
+    # Bound both SQL projection and Python results, not just fetchmany(). Include
+    # row positions to verify source order and every occurrence of duplicate rows.
+    for start in range(0, rows, VALIDATION_BATCH_ROWS):
+        end = start + VALIDATION_BATCH_ROWS
+        expected = connection.execute('''
+            SELECT sha256(to_json(b)) FROM (
+                SELECT *, rowid AS file_row_number FROM batch
+                WHERE rowid >= ? AND rowid < ?
+            ) AS b
+        ''', [start, end]).fetchall()
+        actual = connection.execute('''
+            SELECT sha256(to_json(p))
+            FROM read_parquet(?, file_row_number = true) AS p
+            WHERE file_row_number >= ? AND file_row_number < ?
+        ''', [str(parquet), start, end]).fetchall()
+        if sorted(expected) != sorted(actual):
+            raise ValueError(mismatch)
 
 
 def ingest_batch(source, parquet_dir, database):
@@ -112,6 +126,7 @@ def ingest_batch(source, parquet_dir, database):
         batch_id = digest.hexdigest()
         parquet = parquet_dir / f'{batch_id}.parquet'
         with duckdb.connect(config={'threads': 1, 'memory_limit': '256MB',
+                                    'preserve_insertion_order': True,
                                     'temp_directory': str(Path(directory) / 'spill')}) as conversion:
             conversion.read_json(str(snapshot), columns=COLUMNS,
                                  format='newline_delimited').create('batch')
@@ -145,10 +160,15 @@ def ingest_batch(source, parquet_dir, database):
             inserted = 0
             if existing is None:
                 count_before = connection.execute('SELECT count(*) FROM events').fetchone()[0]
+                # Deduplicate narrow row positions, then stream the wide payloads.
                 connection.execute('''INSERT INTO events
-                    SELECT * FROM read_parquet(?)
-                    QUALIFY row_number() OVER (PARTITION BY event_id) = 1
-                    ON CONFLICT DO NOTHING''', [str(parquet)])
+                    SELECT * EXCLUDE (file_row_number)
+                    FROM read_parquet(?, file_row_number = true)
+                    WHERE file_row_number IN (
+                        SELECT min(file_row_number)
+                        FROM read_parquet(?, file_row_number = true)
+                        GROUP BY event_id)
+                    ON CONFLICT DO NOTHING''', [str(parquet), str(parquet)])
                 inserted = connection.execute('SELECT count(*) FROM events').fetchone()[0] - count_before
                 connection.execute('INSERT INTO imported_batches VALUES (?, ?, ?, ?, current_timestamp)',
                                    [batch_id, parquet.name, rows, inserted])

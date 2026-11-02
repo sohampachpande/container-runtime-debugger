@@ -21,7 +21,9 @@ separate database and does not require a host Python environment.
    explicit column types. It snapshots projected rows into a private temporary
    directory so conversion does not repeatedly read the original file.
 3. DuckDB writes Zstandard-compressed Parquet. The source file's SHA-256 names
-   the batch. Full row comparison validates the output before atomic publication
+   the batch. SHA-256 fingerprint comparison of complete typed rows in
+   512-row validation batches, including row positions and duplicate multiplicity,
+   validates the output before atomic publication
    without overwriting an existing batch. A retry validates the existing file.
 4. The importer inserts events and a batch ledger record in one transaction.
    Event IDs hash canonical original Tetragon JSON, making key order irrelevant.
@@ -81,6 +83,11 @@ First finish the policy-loading checks in [the security-event guide](security-ev
 The commands below validate and test Vector, then update its service so the new
 file sink is active. Startup may recreate services to apply pending configuration.
 The existing acceptance script only proves execution/exit telemetry.
+Select the running Juice Shop container with
+`python3 scripts/select-workload.py --desktop` before starting/recreating Vector.
+The acceptance check now requires
+selected-workload execution/exit in normalized output and host probes only in
+raw Tetragon logs. See [workload selection](process-noise.md).
 
 ```sh
 docker compose -p runtime-visibility-desktop \
@@ -186,12 +193,34 @@ arguments and paths; keep them local.
 
 ## Verification and limits
 
-Ten offline tests cover timezone and nanosecond-source timestamp/JSON preservation, missing optional
+Offline storage tests cover timezone and nanosecond-source timestamp/JSON preservation, missing optional
 context, same-batch retries, within/across-batch duplicates, malformed/empty
 inputs, unsupported schema versions, post-publication recovery, transactional
 rollback, and corrupt published files. Fixtures are synthetic and contain no
 production captures. The timestamp test also fetches timezone-aware Python
 results, covering the required `pytz` dependency.
+
+Validation first checks total row counts, then compares full typed-row SHA-256
+fingerprints in ranges of at most 512 source/Parquet row positions. The SQL
+projection and Python results are both limited to that range; limiting only
+`fetchmany()` would not bound the underlying SQL comparison. Each fingerprint
+includes its row position, so changed metadata, duplicate counts, and reordered
+rows are detected, including changes after the first range. Conversion explicitly
+enables `preserve_insertion_order`, preserving the first occurrence used during
+event-ID deduplication. See [DuckDB order preservation](https://duckdb.org/docs/stable/sql/dialect/order_preservation).
+
+Insertion deduplicates narrow Parquet row positions before reading payloads.
+The existing 256 MB engine limit passed real 18,443-record/55.9 MiB and
+21,786-record/66 MiB batches in isolation. A synthetic 16,000-row capture with
+long arguments previously exhausted whole-file validation; the bounded validator
+now passes that regression and a same-file retry. All 26 Python/UI tests pass.
+The rebuilt live dashboard revalidated every existing staging batch and reported
+zero new records on retry, preserving the database's 50,418 records.
+No engine/container memory limits were raised. The validation range bounds row
+count, not bytes: exceptionally large individual events, Parquet decoding, and
+other conversion/import stages still consume memory and can reach the limit.
+Compared with a single whole-file query, the loop issues more range queries;
+the tradeoff is query/read overhead for smaller comparison working sets.
 
 **Live Docker Desktop evidence, 2026-10-27:**
 

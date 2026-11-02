@@ -160,3 +160,11 @@ outstanding retention/load/crash gates. Application API, alerts, broader file
 coverage, inbound networking, UDP, and DNS attribution remain follow-on work.
 ClickHouse remains the preferred future server if measured
 shared-ingestion/query requirements justify it.
+
+On 2026-11-01 the user approved [process-noise reduction](../docs/process-noise.md):
+keep selected-workload lifecycle records before staging, default Explore to
+Juice Shop, and group execution/exit by host and execution ID. Preserve raw
+host-wide logs, file/network routing, original records, and historical storage.
+Refresh the configured container ID after application recreation; automatic
+workload discovery is not introduced. This does not change the outstanding
+retention/load/crash acceptance gates.

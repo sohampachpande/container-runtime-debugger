@@ -55,6 +55,9 @@ docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml run --rm --no-deps vector \
   test /etc/vector/vector.toml
 docker compose -p runtime-visibility-desktop \
+  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+python3 scripts/select-workload.py --desktop
+docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml up --detach
 ```
 
@@ -64,7 +67,9 @@ events...`, and for Vector to begin watching the raw event file.
 
 ## Repeat the live acceptance check
 
-The existing check below validates Milestone 4 execution/exit telemetry.
+The check below validates scoped execution/exit telemetry: selected Juice Shop
+events reach normalized output and metrics, while host probes remain in raw
+Tetragon logs and are excluded from normalized output.
 For the new Milestone 5 policy-loading and file/network probes, follow
 [the security-event guide](security-events.md). Those probes are not yet
 part of the existing acceptance script.
@@ -85,6 +90,9 @@ A second probe executes Node.js inside Juice Shop. Raw events and Linux
 Docker access rather than access to a macOS `/var/log/tetragon` path. Expected
 output includes `observed_node: docker-desktop` and the LinuxKit kernel version.
 The temporary helper exits and is removed; the lab containers stay running.
+The script first verifies that Vector selects the current Juice Shop container.
+Run [workload selection](process-noise.md#select-the-current-container) again
+after recreating the application. The environment file lives outside Git.
 The revised check snapshots retained raw-record fingerprints before probing,
 then searches the active file and timestamped rotated `.log` backups for new
 records. It avoids reusing an offset after rotation, but scans retained logs on

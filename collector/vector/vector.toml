@@ -59,6 +59,9 @@ metric_event_type = "other"
 if includes(["process_exec", "process_exit", "process_kprobe", "process_tracepoint", "process_loader", "process_uprobe", "process_throttle", "process_lsm", "process_usdt", "test", "rate_limit_info"], event_type) {
   metric_event_type = event_type
 }
+monitored = get_env_var("MONITORED_CONTAINER_ID") ?? ""
+prefix = string(process.docker) ?? ""
+selected = match(monitored, r'^[a-f0-9]{64}$') && length(prefix) >= 12 && starts_with(monitored, prefix)
 . = {
   "schema_version": 1,
   "collector": "tetragon",
@@ -70,6 +73,7 @@ if includes(["process_exec", "process_exit", "process_kprobe", "process_tracepoi
   "process": process,
   "parent": payload.parent,
   "container": {"id_prefix": process.docker},
+  "workload": {"monitored": selected},
   "policy": payload.policy_name,
   "hook": payload.function_name,
   "file": file,
@@ -78,9 +82,16 @@ if includes(["process_exec", "process_exit", "process_kprobe", "process_tracepoi
 }
 '''
 
+[transforms.workload_events]
+type = "filter"
+inputs = ["normalize"]
+condition = '''
+!includes(["process_exec", "process_exit"], .event_type) || .workload.monitored == true
+'''
+
 [transforms.event_counter]
 type = "log_to_metric"
-inputs = ["normalize"]
+inputs = ["workload_events"]
 
 [[transforms.event_counter.metrics]]
 type = "counter"
@@ -93,7 +104,7 @@ host = "{{ host.name }}"
 
 [sinks.normalized]
 type = "console"
-inputs = ["normalize"]
+inputs = ["workload_events"]
 target = "stdout"
 encoding.codec = "json"
 
@@ -105,7 +116,7 @@ encoding.codec = "json"
 
 [sinks.staging]
 type = "file"
-inputs = ["normalize"]
+inputs = ["workload_events"]
 path = "/var/lib/vector/staging/events-%Y-%m-%d.jsonl"
 timezone = "UTC"
 encoding.codec = "json"
@@ -178,9 +189,14 @@ source = 'assert_eq!(.message, "not JSON")'
 name = "counter labels exclude process and container identifiers"
 
 [[tests.inputs]]
-insert_at = "normalize"
+insert_at = "workload_events"
 type = "log"
-log_fields.message = '{"time":"2026-10-25T18:23:53Z","node_name":"test-host","process_exec":{"process":{"pid":999,"binary":"/unique/path","docker":"unique-container"}}}'
+log_fields.event_type = "process_kprobe"
+log_fields.metric_event_type = "process_kprobe"
+log_fields.host.name = "test-host"
+log_fields.process.pid = 999
+log_fields.process.binary = "/unique/path"
+log_fields.container.id_prefix = "unique-container"
 
 [[tests.outputs]]
 extract_from = "event_counter"
@@ -188,7 +204,7 @@ extract_from = "event_counter"
 type = "vrl"
 source = '''
 assert_eq!(.name, "runtime_events_total")
-assert_eq!(.tags, {"event_type": "process_exec", "host": "test-host"})
+assert_eq!(.tags, {"event_type": "process_kprobe", "host": "test-host"})
 assert_eq!(.type, "counter")
 assert_eq!(.kind, "incremental")
 '''
@@ -313,3 +329,68 @@ extract_from = "normalize.dropped"
 [[tests.outputs.conditions]]
 type = "vrl"
 source = 'assert!(contains(string!(.message), "process_exec"))'
+
+[[tests]]
+name = "selected workload retains a shell execution"
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_exec"
+log_fields.workload.monitored = true
+log_fields.process.binary = "/bin/sh"
+[[tests.outputs]]
+extract_from = "workload_events"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert_eq!(.process.binary, "/bin/sh")'
+
+[[tests]]
+name = "selected workload retains exits"
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_exit"
+log_fields.workload.monitored = true
+[[tests.outputs]]
+extract_from = "workload_events"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert_eq!(.event_type, "process_exit")'
+
+[[tests]]
+name = "infrastructure process events are excluded"
+no_outputs_from = ["workload_events", "event_counter"]
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_exec"
+log_fields.workload.monitored = false
+log_fields.process.binary = "/usr/local/bin/python"
+
+[[tests]]
+name = "missing workload identity does not retain process events"
+no_outputs_from = ["workload_events", "event_counter"]
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_exit"
+
+[[tests]]
+name = "file and network payloads survive outside selected workload"
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_kprobe"
+log_fields.workload.monitored = false
+log_fields.category = "file"
+[[tests.inputs]]
+insert_at = "workload_events"
+type = "log"
+log_fields.event_type = "process_kprobe"
+log_fields.workload.monitored = false
+log_fields.category = "network"
+[[tests.outputs]]
+extract_from = "workload_events"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert!(includes(["file", "network"], .category))'

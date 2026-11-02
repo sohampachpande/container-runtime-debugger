@@ -40,6 +40,9 @@ services:
 
   vector:
     image: timberio/vector:0.60.0-alpine
+    env_file:
+      - path: ${WORKLOAD_ENV_FILE:-/tmp/runtime-visibility-workload.env}
+        required: false
     user: "0:0"
     command: ["--config", "/etc/vector/vector.toml", "--threads", "1"]
     mem_limit: 128m
@@ -73,6 +76,9 @@ services:
 
   datastore-ui:
     profiles: ["ui"]
+    env_file:
+      - path: ${WORKLOAD_ENV_FILE:-/tmp/runtime-visibility-workload.env}
+        required: false
     build:
       context: .
       dockerfile: datastore_ui/Dockerfile

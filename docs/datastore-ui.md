@@ -31,6 +31,9 @@ ordinary Compose startup still starts the three telemetry/demo services.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
+  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+python3 scripts/select-workload.py --desktop
+docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml --profile ui config --quiet
 docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml --profile ui \
@@ -55,13 +58,17 @@ Process arguments, file paths, and original events can contain sensitive data.
 
 - **Import latest** adds new records, preserving the existing importer’s
   event-ID deduplication. Repeated inputs do not duplicate native table rows.
-- **Explore** filters by time window, security category, and Docker ID prefix.
-  Time windows are relative to the latest imported event, so old captures stay
+- **Explore** defaults to Juice Shop and filters by time window, security
+  category, and workload. Time windows are relative to the latest imported
+  event for the selected workload, so old captures stay
   useful. All displayed times are UTC. A Docker prefix is not a full ID or cgroup.
 - Category counts, an event timeline, and top TCP destinations summarize the
   selection. The timeline shows at most 500 time/category groups; the table
-  shows the latest 200 matching events. Select a row for the full normalized
-  object, including its original `tetragon` event.
+  shows the latest 200 matching file/network/other events. The process table
+  combines execution and exit into lifecycle rows keyed by host/execution ID.
+  Select a row for the full original records. No exit observed does not mean
+  the process is still running; missing exit status remains null. See
+  [lifecycle semantics and workload refresh](process-noise.md).
 - **SQL** runs one read-only `SELECT`, with up to 500 returned rows and a
   five-second execution timeout. SQL has its own filters; Explore filters do
   not apply. File/network access and automatic extension loading are disabled
@@ -84,8 +91,9 @@ ORDER BY attempts DESC;
 File records are permission-hook observations, potentially repeated or for
 directories; a return value of zero does not prove a completed read. TCP records
 are outbound attempts, not established sessions or transferred bytes. The
-Node.js/probe-path collection boundaries still apply. Older version-1 captures
-without category fields appear under `other`; the UI does not invent coverage.
+Node.js/probe-path collection boundaries still apply. For older version-1
+captures, known execution/exit transport types appear under `process`; other
+missing categories remain `other`. Original stored records are unchanged.
 
 ## Snapshot boundaries and tradeoffs
 

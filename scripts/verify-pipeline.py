@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the root Compose pipeline using fresh host and Juice Shop events."""
+"""Verify scoped telemetry: retain Juice Shop and keep host probes only in raw logs."""
 
 import argparse
 import datetime
@@ -55,6 +55,10 @@ else:
 
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
 container = json.loads(docker('inspect', juice_id))[0]
+vector = json.loads(docker('inspect', vector_id))[0]
+selection = next((value.split('=', 1)[1] for value in vector['Config']['Env']
+                  if value.startswith('MONITORED_CONTAINER_ID=')), '')
+assert selection == container['Id'], 'Run scripts/select-workload.py and recreate Vector to select the current Juice Shop container'
 marker = f'compose_pipeline_probe_{uuid.uuid4().hex}'
 expected_raw = {}
 
@@ -84,7 +88,7 @@ else:
     host = subprocess.Popen(['/usr/bin/sleep', '2'])
     host_pid = host.pid
 docker('exec', '--detach', juice_id, '/nodejs/bin/node', '-e',
-       f'setTimeout(() => {{}}, 15000) // {marker}')
+       f'setTimeout(() => {{}}, 4000) // {marker}')
 assert host.wait(timeout=10) == 0
 deadline = time.monotonic() + 15
 while time.monotonic() < deadline:
@@ -98,16 +102,17 @@ while time.monotonic() < deadline:
             process = payload['process']
             if process['pid'] == host_pid:
                 expected_raw['host_exec' if event_type == 'process_exec' else 'host_exit'] = event
-            if event_type == 'process_exec' and process.get('binary') == '/nodejs/bin/node' and marker in process.get('arguments', ''):
+            if process.get('binary') == '/nodejs/bin/node' and marker in process.get('arguments', ''):
                 prefix = process.get('docker', '')
                 assert prefix and container['Id'].startswith(prefix)
-                cgroup = docker('exec', tetragon_id, 'cat', f'/proc/{process["pid"]}/cgroup')
-                assert container['Id'] in cgroup
-                expected_raw['container_exec'] = event
-    if len(expected_raw) == 3:
+                if event_type == 'process_exec':
+                    cgroup = docker('exec', tetragon_id, 'cat', f'/proc/{process["pid"]}/cgroup')
+                    assert container['Id'] in cgroup
+                expected_raw['container_exec' if event_type == 'process_exec' else 'container_exit'] = event
+    if len(expected_raw) == 4:
         break
     time.sleep(0.2)
-assert len(expected_raw) == 3, list(expected_raw)
+assert len(expected_raw) == 4, list(expected_raw)
 
 matched = {}
 deadline = time.monotonic() + 10
@@ -119,7 +124,8 @@ while time.monotonic() < deadline:
             continue
         for name, raw in expected_raw.items():
             if event.get('tetragon') == raw:
-                kind = 'process_exit' if name == 'host_exit' else 'process_exec'
+                assert not name.startswith('host_'), 'Infrastructure process event passed the workload filter'
+                kind = 'process_exit' if name == 'container_exit' else 'process_exec'
                 assert event['event_type'] == kind
                 assert event['process'] == raw[kind]['process']
                 assert event['host']['name'] == raw['node_name'] == node
@@ -133,14 +139,15 @@ while time.monotonic() < deadline:
         after.get((node, kind), 0) > before.get((node, kind), 0)
         for kind in ('process_exec', 'process_exit')
     )
-    if len(matched) == 3 and counters_advanced:
+    if len(matched) == 2 and counters_advanced:
         break
     time.sleep(0.2)
-assert len(matched) == 3, matched
+assert len(matched) == 2, matched
 for kind in ('process_exec', 'process_exit'):
     key = (node, kind)
     assert after.get(key, 0) > before.get(key, 0), (kind, before, after)
-print(json.dumps({'observed_node': node, 'observed_kernel': kernel, 'matched_events': matched, 'counter_deltas': {
+print(json.dumps({'observed_node': node, 'observed_kernel': kernel, 'matched_events': matched,
+    'host_probes_retained_only_in_raw': True, 'counter_deltas': {
     kind: after.get((node, kind), 0) - before.get((node, kind), 0)
     for kind in ('process_exec', 'process_exit')},
     'metric_label_keys': ['event_type', 'host']}, indent=2))
