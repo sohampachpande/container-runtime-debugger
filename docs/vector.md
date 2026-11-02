@@ -12,6 +12,7 @@ deferred. Prometheus scraping and execution of a rate query remain unverified.
 /var/log/tetragon/tetragon.log
   → file source with persistent read checkpoints
   → common envelope for process/file/network events
+      → selected-workload filter for process execution/exit
       → structured JSON on stdout
       → persistent JSONL staging
       → runtime_events_total{host,event_type} on /metrics
@@ -47,6 +48,15 @@ Vector does not assign a second identity. Previously staged version-1 records
 may lack the added category/details, and imports do not rewrite existing rows.
 Eleven pinned-image tests cover the original lifecycle behavior, both new
 mappings, optional fields, unknown payloads, rejection, and label isolation.
+Five additional tests cover workload routing. The full suite has 16 tests.
+
+The normalized `workload.monitored` flag compares the exported Docker prefix to
+the configured full `MONITORED_CONTAINER_ID`. The `workload_events` filter keeps
+only selected-workload execution/exit records before console, staging, and
+metrics. File/network/other records retain their existing routing. Missing or
+invalid selection excludes lifecycle records; it does not broaden collection.
+See [workload selection and process grouping](process-noise.md). Raw Tetragon
+collection remains host-wide, and no executable is globally excluded.
 
 The counter increases once per normalized record and has exactly two labels:
 host and event type. The `event_type` label uses `metric_event_type`, a bounded
@@ -103,9 +113,10 @@ No separate Vector Compose file or hand-written `docker run` deployment is neede
 ## Verify the pipeline
 
 The [Desktop acceptance check](docker-desktop.md#repeat-the-live-acceptance-check)
-generates fresh host and Juice Shop executions. Match their host PIDs,
-executables, execution IDs, and original event objects between the raw file
-and normalized output. Confirm that both event counters advance and that
+generates fresh host and Juice Shop executions. Match Juice Shop's host PID,
+executable, execution ID, and original event object between the raw file and
+normalized output; require the host execution/exit to remain raw-only. Confirm
+that both selected-workload event counters advance and that
 labels remain limited to `host` and `event_type`.
 
 Use the [Desktop lifecycle commands](docker-desktop.md#inspect-output-and-stop)

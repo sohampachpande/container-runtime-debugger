@@ -20,15 +20,23 @@ class DashboardTests(unittest.TestCase):
             root = Path(directory)
             source = root / 'staging'
             source.mkdir()
-            with patch.dict(os.environ, {'STAGING_DIR': str(source), 'DATASTORE_DIR': str(root / 'data')}):
+            with patch.dict(os.environ, {'STAGING_DIR': str(source), 'DATASTORE_DIR': str(root / 'data'),
+                                         'MONITORED_CONTAINER_ID': 'a' * 64}):
                 app = AppTest.from_file('datastore_ui/app.py', default_timeout=15).run()
                 self.assertEqual(len(app.exception), 0)
                 self.assertTrue(any('No imported events' in message.value for message in app.info))
                 records = [event(1), event(2, 'file'), event(3, 'network')]
+                infrastructure = event(4)
+                infrastructure['container']['id_prefix'] = 'b' * 31
+                records.append(infrastructure)
                 (source / 'events.jsonl').write_text(''.join(json.dumps(record) + '\n' for record in records))
                 next(button for button in app.button if button.label == 'Import latest').click().run()
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual([metric.value for metric in app.metric], ['1', '1', '1', '0'])
+                workload = next(select for select in app.selectbox if select.label == 'Workload')
+                self.assertEqual(workload.value, 'Juice Shop (monitored)')
+                workload.set_value('All workloads').run()
+                self.assertEqual([metric.value for metric in app.metric], ['2', '1', '1', '0'])
                 app.radio[0].set_value('SQL').run()
                 app.text_area[0].set_value('SELECT category, count(*) AS records FROM security_events GROUP BY category ORDER BY category')
                 next(button for button in app.button if button.label == 'Run query').click().run()

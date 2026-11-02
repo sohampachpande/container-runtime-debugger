@@ -9,7 +9,7 @@ import unittest
 
 import duckdb
 
-from scripts.ingest_events import ingest_batch
+from scripts.ingest_events import VALIDATION_BATCH_ROWS, ingest_batch
 
 
 def execution(pid=123):
@@ -74,6 +74,86 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(second['inserted_rows'], 0)
         self.assertEqual(identity, (published.stat().st_ino, published.stat().st_mtime_ns))
         self.assertEqual(len(list(self.parquet.glob('*.parquet'))), 1)
+
+    def test_large_capture_validates_and_imports_with_existing_memory_budget(self):
+        source = self.root / 'large.jsonl'
+        with source.open('w') as output:
+            for number in range(16000):
+                record = execution(number)
+                record['process']['arguments'] = 'x' * 2048
+                output.write(json.dumps(record) + '\n')
+        result = self.ingest(source)
+        self.assertEqual((result['source_rows'], result['inserted_rows']), (16000, 16000))
+        self.assertEqual(self.ingest(source)['inserted_rows'], 0)
+
+    def test_row_checksums_detect_changed_metadata_and_duplicate_multiplicity(self):
+        for index, change in enumerate(('metadata', 'multiplicity')):
+            with self.subTest(change=change):
+                first, second = execution(100 + index * 10), execution(101 + index * 10)
+                source = self.capture(change + '.jsonl', [first, first, second])
+                result = self.ingest(source)
+                published = Path(result['parquet'])
+                replacement = self.root / (change + '.parquet')
+                with duckdb.connect() as connection:
+                    connection.read_parquet(str(published)).create('published')
+                    if change == 'metadata':
+                        connection.execute("UPDATE published SET normalized_event = json_merge_patch(normalized_event, '{\"extra\":\"changed\"}')")
+                        rows = connection.table('published')
+                    else:
+                        rows = connection.sql('''
+                            (SELECT DISTINCT * FROM published)
+                            UNION ALL
+                            SELECT * FROM published WHERE event_id = (
+                                SELECT event_id FROM published GROUP BY event_id HAVING count(*) = 1)
+                        ''')
+                    rows.write_parquet(str(replacement), compression='zstd')
+                replacement.replace(published)
+                with self.assertRaisesRegex(ValueError, 'content does not match'):
+                    self.ingest(source)
+
+    def test_validation_checks_rows_after_first_batch_and_source_order(self):
+        source = self.capture('multiple-batches.jsonl',
+                              [execution(number) for number in range(VALIDATION_BATCH_ROWS + 3)])
+        result = self.ingest(source)
+        published = Path(result['parquet'])
+        original = published.read_bytes()
+        for change in ('last-row', 'order'):
+            with self.subTest(change=change):
+                published.write_bytes(original)
+                replacement = self.root / 'changed.parquet'
+                with duckdb.connect() as connection:
+                    connection.read_parquet(str(published)).create('published')
+                    if change == 'last-row':
+                        connection.execute('''UPDATE published
+                            SET normalized_event = json_merge_patch(normalized_event, '{"extra":"changed"}')
+                            WHERE rowid = ?''', [VALIDATION_BATCH_ROWS + 2])
+                        rows = connection.table('published')
+                    else:
+                        rows = connection.sql('SELECT * FROM published ORDER BY rowid DESC')
+                    rows.write_parquet(str(replacement), compression='zstd')
+                replacement.replace(published)
+                with self.assertRaisesRegex(ValueError, 'content does not match'):
+                    self.ingest(source)
+
+    def test_validation_rejects_extra_or_missing_rows(self):
+        source = self.capture('row-count.jsonl', [execution(), execution(124)])
+        result = self.ingest(source)
+        published = Path(result['parquet'])
+        original = published.read_bytes()
+        for change in ('extra', 'missing'):
+            with self.subTest(change=change):
+                published.write_bytes(original)
+                replacement = self.root / 'changed.parquet'
+                with duckdb.connect() as connection:
+                    connection.read_parquet(str(published)).create('published')
+                    if change == 'extra':
+                        rows = connection.sql('SELECT * FROM published UNION ALL SELECT * FROM published LIMIT 3')
+                    else:
+                        rows = connection.sql('SELECT * FROM published LIMIT 1')
+                    rows.write_parquet(str(replacement), compression='zstd')
+                replacement.replace(published)
+                with self.assertRaisesRegex(ValueError, 'content does not match'):
+                    self.ingest(source)
 
     def test_duplicates_within_and_across_batches_are_deduplicated(self):
         event = execution()

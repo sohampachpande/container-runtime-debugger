@@ -293,6 +293,28 @@ workload/time filters, charts, event inspection, and a bounded read-only SQL
 editor. The original host batch workflow remains available. This does not
 complete Milestone 5's outstanding retention and operational acceptance work.
 
+On 2026-11-01, [process-noise reduction](process-noise.md) added selected-workload
+filtering before normalized console/staging/metrics, a Juice Shop dashboard
+default, and lifecycle rows grouped by host/execution identity. Raw collector
+scope and file/network policy routing remain unchanged; historical data is
+preserved. Pinned Vector validation and 16 transform tests pass; all 26 Python/UI
+tests pass, including lifecycle pairing and the existing storage guarantees. The updated
+live acceptance check passed selected-workload execution/exit retention and
+raw-only host probes. Controlled file/TCP probes and execution from a temporary
+alternate executable path inside Juice Shop reached staging with exact raw
+preservation. No collection-wide executable exclusion was introduced.
+The suite includes lifecycle query and wide-batch import regressions.
+Both selected/all-workload tables pass on the existing 7,969-row capture at the
+original 128 MB query limit. Full-row fingerprint validation and narrow
+row-position insertion pass the real 18,443- and 21,786-record batches at the
+original 256 MB import limit. After the user selected bounded validation,
+512-row comparison ranges also pass the synthetic 16,000-row wide capture and
+retry. Tests reject corruption after the first range, row reordering, and
+extra/missing records. No memory limits were raised; this bounds validation row
+counts rather than guaranteeing every event width or conversion workload fits.
+The rebuilt live dashboard revalidated existing staging/Parquet batches and
+reported zero new records on retry, retaining all 50,418 database records.
+
 ## Milestone 6: Agent packaging
 
 Package the agent as a dedicated Docker image and prepare a Kubernetes DaemonSet manifest.

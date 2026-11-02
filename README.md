@@ -19,6 +19,9 @@ for prerequisites, validation, logs, and shutdown commands.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
+  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+python3 scripts/select-workload.py --desktop
+docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml up --detach
 python3 scripts/verify-pipeline.py --desktop
 ```
@@ -27,6 +30,9 @@ Open [Juice Shop](http://localhost:3000). Vector exposes event counters at
 [localhost:9598/metrics](http://localhost:9598/metrics) and normalized JSON in
 its container logs. Tetragon and Vector share raw events through a Docker
 named volume. The collector observes the Linux VM kernel, not macOS.
+Normalized process telemetry is scoped to Juice Shop; raw Tetragon collection
+remains host-wide. [Refresh the workload selection](docs/process-noise.md) after
+recreating Juice Shop. No Docker socket is mounted into Vector or the UI.
 
 For charts, event inspection, and a read-only SQL editor, start the optional
 [DuckDB dashboard](docs/datastore-ui.md) in its own container:

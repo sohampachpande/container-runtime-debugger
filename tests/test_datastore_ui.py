@@ -15,7 +15,7 @@ def event(number, category='process'):
     process = {'pid': number, 'exec_id': f'ui-test:{number}', 'binary': '/nodejs/bin/node'}
     return {'schema_version': 1, 'collector': 'tetragon', 'event_type': kind,
             'timestamp': '2026-10-28T12:00:00Z', 'host': {'name': 'test-host'},
-            'category': category, 'process': process, 'container': {'id_prefix': 'workload'},
+            'category': category, 'process': process, 'container': {'id_prefix': 'a' * 31},
             'file': {'path': '/tmp/fake-credentials', 'permission_mask': 4, 'permission_result': 0} if category == 'file' else None,
             'network': {'destination_ip': '127.0.0.1', 'destination_port': 12345, 'state': 'TCP_SYN_SENT'} if category == 'network' else None,
             'tetragon': {'time': '2026-10-28T12:00:00Z', 'node_name': 'test-host', kind: {'process': process}}}
@@ -95,6 +95,68 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(duckdb.InterruptException):
             self.store.query('SELECT sum(random()) FROM range(1000000000000)')
         self.assertEqual(self.store.query('SELECT 42')[1], [(42,)])
+
+    def test_lifecycles_pair_execution_and_exit_without_merging_reused_pids(self):
+        started = event(1)
+        ended = event(1)
+        ended['event_type'] = 'process_exit'
+        ended['timestamp'] = '2026-10-28T12:00:04Z'
+        ended['tetragon'] = {'time': ended['timestamp'], 'node_name': 'test-host',
+                            'process_exit': {'process': ended['process'], 'status': 7}}
+        reused_pid = event(2)
+        reused_pid['process']['pid'] = 1
+        missing_exit = event(3)
+        missing_start = event(4)
+        missing_start['event_type'] = 'process_exit'
+        missing_start['tetragon'] = {'time': missing_start['timestamp'], 'node_name': 'test-host',
+                                    'process_exit': {'process': missing_start['process'], 'signal': 'SIGKILL'}}
+        records = [started, ended, reused_pid, missing_exit, missing_start]
+        self.source.write_text(''.join(json.dumps(record) + '\n' for record in records))
+        self.store.import_latest()
+        _, rows, _ = self.store.query('''SELECT process_exec_id, duration_seconds, exit_status,
+            exit_signal, execution_seen, observation FROM process_lifecycles ORDER BY process_exec_id''')
+        self.assertEqual(rows, [
+            ('ui-test:1', 4.0, 7, None, True, 'Exit observed'),
+            ('ui-test:2', None, None, None, True, 'No exit observed'),
+            ('ui-test:3', None, None, None, True, 'No exit observed'),
+            ('ui-test:4', None, None, 'SIGKILL', False, 'Exit observed')])
+        columns, recent, _ = self.store.lifecycles(' WHERE event_time >= ?', ['2026-10-28T12:00:03Z'])
+        self.assertEqual(len(recent), 1)
+        self.assertEqual(recent[0][columns.index('duration_seconds')], 4.0)
+
+    def test_lifecycles_separate_hosts_and_missing_execution_ids(self):
+        records = [event(1), event(1), event(2), event(3), event(4)]
+        records[1]['host']['name'] = 'second-host'
+        records[1]['tetragon']['node_name'] = 'second-host'
+        for record in records[2:4]:
+            record['process']['exec_id'] = ''
+        del records[4]['process']['exec_id']
+        self.source.write_text(''.join(json.dumps(record) + '\n' for record in records))
+        self.store.import_latest()
+        self.assertEqual(self.store.query('SELECT count(*) FROM process_lifecycles')[1], [(5,)])
+
+    def test_lifecycle_uses_exported_start_time_and_preserves_missing_status(self):
+        record = event(1)
+        record['event_type'] = 'process_exit'
+        record['process']['start_time'] = '2026-10-28T11:59:57.500Z'
+        record['tetragon'] = {'time': record['timestamp'], 'node_name': 'test-host',
+                              'process_exit': {'process': record['process']}}
+        self.source.write_text(json.dumps(record) + '\n')
+        self.store.import_latest()
+        self.assertEqual(self.store.query('SELECT duration_seconds, exit_status FROM process_lifecycles')[1], [(2.5, None)])
+
+    def test_lifecycle_query_handles_many_identities_with_long_arguments(self):
+        with duckdb.connect(str(self.store.database)) as connection:
+            connection.execute('''INSERT INTO events
+                SELECT CAST(i AS VARCHAR), TIMESTAMPTZ '2026-11-01 12:00:00Z',
+                       1, 'process_exec', 'test-host', 'exec:' || i, repeat('a', 31),
+                       json_object('process', json_object('binary', '/nodejs/bin/node',
+                           'arguments', repeat('x', 2000) || i))
+                FROM range(8000) AS t(i)''')
+        columns, rows, _ = self.store.lifecycles()
+        self.assertEqual(len(rows), 200)
+        self.assertTrue(all(row[columns.index('executable')] == '/nodejs/bin/node' and
+                            row[columns.index('observation')] == 'No exit observed' for row in rows))
 
 
 if __name__ == '__main__':

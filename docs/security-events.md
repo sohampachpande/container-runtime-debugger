@@ -32,6 +32,12 @@ This is step 1 of [the action plan](../plans/milestone-5-datastore-plan.md).
 | Sensitive-file access | `security_file_permission` kprobe and return probe | Node.js and disposable protected-path prefix |
 | Outbound TCP attempt | `tcp_connect` kprobe | `/nodejs/bin/node` executions |
 
+The table describes collector scope. Raw execution/exit collection remains
+host-wide; [Vector now retains lifecycle records only for the selected Juice
+Shop container](process-noise.md). File/network routing and the policies below
+are unchanged. This keeps shell/tool execution inside Juice Shop visible while
+excluding the lab's infrastructure processes from new normalized storage.
+
 The policies use `Post` only. No enforcement, payload bytes, or real credentials
 are collected. The file policy reports a permission mask and permission-hook
 result, not bytes read. The network hook observes a TCP connection attempt,
